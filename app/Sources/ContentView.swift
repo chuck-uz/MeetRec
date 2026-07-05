@@ -407,9 +407,15 @@ struct ContentView: View {
 
     private var footer: some View {
         HStack {
-            Text("Системный звук + микрофон")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Toggle(isOn: $state.launchAtLogin) {
+                Text("Автозапуск при входе")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+            .pointingCursor()
+            .help("Запускать MeetRec при входе в систему")
             Spacer()
             Button("Завершить") {
                 state.quit()

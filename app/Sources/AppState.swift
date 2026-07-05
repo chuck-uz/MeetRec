@@ -3,6 +3,7 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 import ScreenCaptureKit
+import ServiceManagement
 import SwiftUI
 import UserNotifications
 
@@ -44,6 +45,24 @@ final class AppState: ObservableObject {
     @Published var diarize: Bool {
         didSet { UserDefaults.standard.set(diarize, forKey: "diarize") }
     }
+    @Published var launchAtLogin: Bool {
+        didSet {
+            guard !suppressLoginItemUpdate, launchAtLogin != oldValue else { return }
+            do {
+                if launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                errorMessage = "Автозапуск: \(error.localizedDescription)"
+                suppressLoginItemUpdate = true
+                launchAtLogin = oldValue
+                suppressLoginItemUpdate = false
+            }
+        }
+    }
+    private var suppressLoginItemUpdate = false
     @Published var recordingSizeText: String?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
@@ -74,6 +93,7 @@ final class AppState: ObservableObject {
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
         captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
         diarize = UserDefaults.standard.bool(forKey: "diarize")
+        launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
         checkModelUpdate()
 

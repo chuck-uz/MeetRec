@@ -23,7 +23,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 
 ## Features
 
-- **One-click recording** — big red button in a compact window, or straight from the menu bar; a live timer sits next to the clock while recording.
+- **One-click recording** — a big round button in a compact window (turns red and pulses while recording), or start straight from the menu bar; a live timer sits next to the clock.
 - **System audio + microphone** captured simultaneously via ScreenCaptureKit and mixed into one stereo AAC file (48 kHz).
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
@@ -32,7 +32,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
 - **Screen video recording (optional)** — a toggle captures the whole screen at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
-- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar.
+- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, launch-at-login checkbox.
 
 ## Installation
 
@@ -99,7 +99,7 @@ AVFoundation ──────► microphone  ──┘                        
                                               whisper.cpp (Metal) ─► transcript .md with timestamps
 ```
 
-- The recorder writes both sources as separate tracks and mixes them down on stop; if the mixdown ever fails, the raw two-track file is kept, so a recording is never lost.
+- The recorder writes the sources as separate tracks (plus a video track when enabled) and mixes them down on stop; if the mixdown ever fails, the raw multi-track file is kept, so a recording is never lost.
 - `whisper-cli` is statically compiled (Metal embedded, system frameworks only) and bundled inside the app — the DMG is fully self-contained.
 - Transcription runs `afconvert` → `whisper-cli` → JSON → Markdown, entirely offline.
 
@@ -118,12 +118,6 @@ A minimal CLI variant also lives in the repo: `swiftc -O -parse-as-library MeetR
 ## Privacy
 
 MeetRec only goes online to fetch models (Whisper and diarization — from Hugging Face, once) and the recommended-models manifest `models.json` in this repository; with Google Calendar connected, it also calls the Calendar API (read-only). Audio and transcripts never leave your Mac. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
-
-## Roadmap
-
-- One-click “analyze in Claude” (summary, action items)
-- Window/display picker for video recording
-- Launch at login
 
 ## License
 
