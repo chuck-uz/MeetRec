@@ -181,15 +181,26 @@ struct ContentView: View {
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.callout)
                 .foregroundStyle(Design.destructive)
-            if state.permissionProblem {
-                Text("Разрешите MeetRec запись в разделе «Запись экрана и системного звука», затем попробуйте снова.")
+            if let issue = state.permissionIssue {
+                Text(issue == .microphone
+                    ? "Разрешите MeetRec доступ в разделе «Микрофон», затем попробуйте снова."
+                    : "Включите MeetRec в разделе «Запись экрана и системного звука», затем перезапустите приложение.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Открыть настройки конфиденциальности") {
-                    state.openPermissionSettings()
+                HStack(spacing: 8) {
+                    Button("Открыть настройки") {
+                        state.openPermissionSettings()
+                    }
+                    .controlSize(.small)
+                    .pointingCursor()
+                    if issue == .screenCapture {
+                        Button("Перезапустить MeetRec") {
+                            state.relaunch()
+                        }
+                        .controlSize(.small)
+                        .pointingCursor()
+                    }
                 }
-                .controlSize(.small)
-                .pointingCursor()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
