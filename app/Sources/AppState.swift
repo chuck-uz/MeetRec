@@ -1,7 +1,16 @@
 import AppKit
+import AVFoundation
+import CoreGraphics
 import Foundation
+import ScreenCaptureKit
 import SwiftUI
 import UserNotifications
+
+/// Какого именно права не хватает для записи.
+enum PermissionIssue {
+    case screenCapture
+    case microphone
+}
 
 extension Notification.Name {
     static let meetrecStartRecording = Notification.Name("ru.dinya.meetrec.startRecording")
@@ -15,7 +24,7 @@ final class AppState: ObservableObject {
     @Published var elapsed: TimeInterval = 0
     @Published var lastSaved: URL?
     @Published var errorMessage: String?
-    @Published var permissionProblem = false
+    @Published var permissionIssue: PermissionIssue?
     @Published var outputDir: URL {
         didSet { UserDefaults.standard.set(outputDir.path, forKey: "outputDir") }
     }
@@ -253,10 +262,66 @@ final class AppState: ObservableObject {
         if isRecording { stopAndSave() } else { start() }
     }
 
+    /// Проверяет права до запуска захвата: так пользователь получает системный
+    /// запрос и понятную подсказку вместо загадочной ошибки от ScreenCaptureKit.
+    private func ensurePermissions() async -> Bool {
+        if !CGPreflightScreenCaptureAccess() {
+            // Показывает системный запрос (один раз) либо просто возвращает false,
+            // если пользователь уже отказал — тогда ведём его в настройки.
+            let granted = CGRequestScreenCaptureAccess()
+            if !granted {
+                permissionIssue = .screenCapture
+                errorMessage = "Нет разрешения на запись экрана и системного звука."
+                return false
+            }
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            break
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            if !granted {
+                permissionIssue = .microphone
+                errorMessage = "Нет доступа к микрофону."
+                return false
+            }
+        default:
+            permissionIssue = .microphone
+            errorMessage = "Нет доступа к микрофону."
+            return false
+        }
+        return true
+    }
+
+    private func handleStartError(_ error: Error) {
+        if let scError = error as? SCStreamError {
+            switch scError.code {
+            case .userDeclined:
+                permissionIssue = .screenCapture
+                errorMessage = "Нет разрешения на запись экрана и системного звука."
+                return
+            default:
+                break
+            }
+        }
+        // Fallback: ScreenCaptureKit не всегда отдаёт типизированную ошибку.
+        let text = error.localizedDescription
+        if text.localizedCaseInsensitiveContains("declined")
+            || text.localizedCaseInsensitiveContains("отклонил")
+            || text.localizedCaseInsensitiveContains("denied")
+            || text.localizedCaseInsensitiveContains("TCC") {
+            permissionIssue = .screenCapture
+            errorMessage = "Нет разрешения на запись звука."
+        } else {
+            errorMessage = "Не удалось начать запись: \(text)"
+        }
+    }
+
     private func start() {
         errorMessage = nil
-        permissionProblem = false
+        permissionIssue = nil
         Task {
+            guard await ensurePermissions() else { return }
             do {
                 let meeting = currentMeeting
                 let title = meeting.map { sanitizeFileName($0.title) }
@@ -283,15 +348,7 @@ final class AppState: ObservableObject {
                     }
                 }
             } catch {
-                let text = error.localizedDescription
-                if text.localizedCaseInsensitiveContains("declined")
-                    || text.localizedCaseInsensitiveContains("отклонил")
-                    || text.localizedCaseInsensitiveContains("TCC") {
-                    permissionProblem = true
-                    errorMessage = "Нет разрешения на запись звука."
-                } else {
-                    errorMessage = "Не удалось начать запись: \(text)"
-                }
+                handleStartError(error)
             }
         }
     }
@@ -396,9 +453,20 @@ final class AppState: ObservableObject {
     }
 
     func openPermissionSettings() {
-        let pane = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        let anchor = permissionIssue == .microphone ? "Privacy_Microphone" : "Privacy_ScreenCapture"
+        let pane = "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
         if let url = URL(string: pane) {
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Право на запись экрана применяется только после перезапуска приложения.
+    func relaunch() {
+        let url = Bundle.main.bundleURL
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
         }
     }
 

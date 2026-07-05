@@ -1,9 +1,28 @@
 #!/bin/zsh
 # Сборка MeetRec.app и установщика MeetRec.dmg
+#   ./build.sh          — только сборка (build/MeetRec.app + dist/MeetRec.dmg)
+#   ./build.sh install  — закрыть приложение, собрать, заменить в /Applications
+#                         и запустить заново (безопасно для прав TCC)
 set -e
 cd "$(dirname "$0")"
 
+MODE="${1:-}"
 APP=build/MeetRec.app
+
+# Заменять .app при живом процессе нельзя: macOS заметит подмену бинарника
+# и может сбросить выданные права. Режим install закрывает приложение сам.
+if [ "$MODE" = "install" ] && pgrep -fq '/Applications/MeetRec.app'; then
+  echo "→ Закрываю запущенный MeetRec…"
+  osascript -e 'tell application "MeetRec" to quit' >/dev/null 2>&1 || true
+  for _ in {1..20}; do
+    pgrep -fq '/Applications/MeetRec.app' || break
+    sleep 0.5
+  done
+  if pgrep -fq '/Applications/MeetRec.app'; then
+    echo "❌ MeetRec не закрылся (возможно, идёт запись). Установка отменена."
+    exit 1
+  fi
+fi
 rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" dist
 
@@ -27,9 +46,29 @@ if [ ! -f app/AppIcon.icns ]; then
 fi
 cp app/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-echo "→ Подпись (ad-hoc)…"
-codesign --force -s - "$APP/Contents/MacOS/whisper-cli"
-codesign --force --deep -s - "$APP"
+# Подпись. Требование кода (designated requirement) должно быть стабильным
+# между пересборками, иначе macOS считает каждую сборку «другим» приложением
+# и сбрасывает выданные права (Запись экрана, Микрофон) в Denied.
+# По умолчанию используется самоподписанный сертификат «MeetRec Dev» из
+# связки login (создан 2026-07-05, см. DEBUG_JOURNAL.md). Ad-hoc — только
+# как крайний fallback: с ним права слетают при каждой пересборке.
+SIGN_IDENTITY="${SIGN_IDENTITY:-MeetRec Dev}"
+if security find-identity -v -p codesigning | grep -q "\"$SIGN_IDENTITY\""; then
+  echo "→ Подпись ($SIGN_IDENTITY)…"
+  codesign --force -s "$SIGN_IDENTITY" \
+    -i ru.dinya.meetrec.whisper-cli "$APP/Contents/MacOS/whisper-cli"
+  codesign --force -s "$SIGN_IDENTITY" \
+    -i ru.dinya.meetrec "$APP"
+else
+  echo "⚠️  Сертификат «$SIGN_IDENTITY» не найден — подпись ad-hoc."
+  echo "   Права на запись экрана будут слетать при каждой пересборке!"
+  codesign --force -s - -i ru.dinya.meetrec.whisper-cli \
+    -r='designated => identifier "ru.dinya.meetrec.whisper-cli"' \
+    "$APP/Contents/MacOS/whisper-cli"
+  codesign --force -s - -i ru.dinya.meetrec \
+    -r='designated => identifier "ru.dinya.meetrec"' \
+    "$APP"
+fi
 
 echo "→ Установщик DMG…"
 DMG_DIR=build/dmg
@@ -44,3 +83,15 @@ rm -rf "$DMG_DIR" # чтобы Spotlight не находил лишнюю коп
 echo "✅ Готово:"
 echo "   Приложение: $APP"
 echo "   Установщик: dist/MeetRec.dmg"
+
+if [ "$MODE" = "install" ]; then
+  echo "→ Установка в /Applications…"
+  rm -rf /Applications/MeetRec.app
+  cp -R "$APP" /Applications/
+  echo "→ Запуск…"
+  open /Applications/MeetRec.app
+  echo "✅ Установлено и запущено."
+else
+  echo "ℹ️  Для установки используйте: ./build.sh install"
+  echo "   (не заменяйте .app вручную при запущенном приложении)"
+fi
