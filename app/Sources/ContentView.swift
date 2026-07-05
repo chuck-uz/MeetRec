@@ -27,6 +27,7 @@ struct ContentView: View {
             }
             Divider()
             folderCard
+            videoCard
             transcribeCard
             calendarCard
             if !state.recentRecordings.isEmpty {
@@ -133,10 +134,18 @@ struct ContentView: View {
     private var statusLine: some View {
         Group {
             if state.isRecording {
-                Text(state.elapsedText)
-                    .font(.system(size: 26, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
+                VStack(spacing: 2) {
+                    Text(state.elapsedText)
+                        .font(.system(size: 26, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    if let size = state.recordingSizeText {
+                        Text("видео · \(size)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
             } else if state.isSaving {
                 Text("Сводим дорожки и сохраняем…")
                     .font(.callout)
@@ -227,6 +236,34 @@ struct ContentView: View {
 
     private var folderIsGoogleDrive: Bool {
         state.outputDir.path.contains("/CloudStorage/GoogleDrive-")
+    }
+
+    private var videoCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "record.rectangle")
+                .foregroundStyle(state.captureVideo ? Design.destructive : Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Видео экрана")
+                    .font(.callout.weight(.medium))
+                Text(state.captureVideo ? "весь экран, 30 к/с · .mp4 рядом с аудио" : "записывается только звук")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Toggle("", isOn: $state.captureVideo)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.primary)
+                .disabled(state.isRecording || state.isSaving)
+                .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
     }
 
     private var transcribeCard: some View {
@@ -389,6 +426,18 @@ private struct RecentRow: View {
 
     @ViewBuilder
     private var transcriptControl: some View {
+        if let video = state.videoURL(for: url) {
+            Button {
+                NSWorkspace.shared.open(video)
+            } label: {
+                Image(systemName: "film")
+                    .font(.caption)
+                    .foregroundStyle(Design.primary)
+            }
+            .buttonStyle(.borderless)
+            .pointingCursor()
+            .help("Открыть видео")
+        }
         if let progress = state.transcribeProgress[url] {
             HStack(spacing: 4) {
                 ProgressView()

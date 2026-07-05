@@ -30,7 +30,8 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
-- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, no Dock icon.
+- **Screen video recording (optional)** — a toggle captures the whole screen at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
+- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar.
 
 ## Installation
 
@@ -83,6 +84,8 @@ Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keycha
 | Transcribe an older recording | Click the ⊕-text icon in its row |
 | Keep window above Zoom | Pin icon in the window header |
 | Change output folder | *Изменить* in the folder card |
+| Record screen video | «Видео экрана» toggle before starting |
+| Open a recording's video | Film icon in the recording row |
 
 ## How it works
 
@@ -118,7 +121,7 @@ MeetRec makes **no network requests** except two explicit ones: downloading the 
 
 - Speaker diarization (“who said what”)
 - One-click “analyze in Claude” (summary, action items)
-- Optional screen video recording
+- Window/display picker for video recording
 - Launch at login
 
 ## License

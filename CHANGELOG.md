@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3] — 2026-07-05
+
+### Added
+- **Screen video recording** (optional toggle): captures the main display at
+  30 fps (HEVC, hardware-encoded on the fly, up to 2560 px wide) alongside
+  audio. Produces two files: the usual `.m4a` for transcription plus an `.mp4`
+  with the screen video and mixed audio — finalized in seconds via remux,
+  no re-encoding.
+- Live recording size indicator under the timer while video is enabled.
+- Film button next to recordings that have a video file.
+
 ## [1.2.1] — 2026-07-05
 
 ### Changed
