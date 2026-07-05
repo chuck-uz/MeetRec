@@ -53,7 +53,10 @@ final class Transcriber {
     private let processLock = NSLock()
     private var running: [Process] = []
 
-    func transcribe(audio: URL, progress: @escaping @Sendable (String) -> Void) async throws -> URL {
+    func transcribe(
+        audio: URL, header: String? = nil,
+        progress: @escaping @Sendable (String) -> Void
+    ) async throws -> URL {
         guard let cli = Self.whisperCLI() else {
             throw MeetRecError("Не найден whisper-cli. Переустановите MeetRec или выполните: brew install whisper-cpp")
         }
@@ -94,7 +97,7 @@ final class Transcriber {
 
         let data = try Data(contentsOf: json)
         let parsed = try JSONDecoder().decode(WhisperOutput.self, from: data)
-        let markdown = renderMarkdown(audio: audio, segments: parsed.transcription)
+        let markdown = renderMarkdown(audio: audio, segments: parsed.transcription, header: header)
         let out = Self.transcriptURL(for: audio)
         try markdown.data(using: .utf8)!.write(to: out)
         return out
@@ -244,8 +247,12 @@ final class Transcriber {
         let transcription: [Segment]
     }
 
-    private func renderMarkdown(audio: URL, segments: [WhisperOutput.Segment]) -> String {
+    private func renderMarkdown(audio: URL, segments: [WhisperOutput.Segment], header: String? = nil) -> String {
         var lines = ["# \(audio.deletingPathExtension().lastPathComponent)", ""]
+        if let header, !header.isEmpty {
+            lines.append(header)
+            lines.append("")
+        }
         for segment in segments {
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }

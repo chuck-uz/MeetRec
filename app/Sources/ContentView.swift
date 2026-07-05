@@ -28,6 +28,7 @@ struct ContentView: View {
             Divider()
             folderCard
             transcribeCard
+            calendarCard
             if !state.recentRecordings.isEmpty {
                 recentSection
             }
@@ -253,6 +254,67 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: Design.corner)
                 .fill(Color.primary.opacity(0.05))
         )
+    }
+
+    private var calendarCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "calendar")
+                .foregroundStyle(Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Google Календарь")
+                    .font(.callout.weight(.medium))
+                Text(calendarSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if !state.calendarConfigured {
+                EmptyView()
+            } else if state.calendarConnected {
+                Button {
+                    state.disconnectCalendar()
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .pointingCursor()
+                .help("Отключить календарь")
+            } else {
+                Button("Подключить") {
+                    state.connectCalendar()
+                }
+                .controlSize(.small)
+                .pointingCursor()
+                .disabled(state.calendarStatus != nil)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private var calendarSubtitle: String {
+        if let status = state.calendarStatus {
+            return status
+        }
+        if !state.calendarConfigured {
+            return "нет google_oauth.json — см. README"
+        }
+        if !state.calendarConnected {
+            return "автоназвание записей по встречам"
+        }
+        if let current = state.currentMeeting {
+            return "идёт: \(current.title)"
+        }
+        if let next = state.nextMeeting {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return "в \(formatter.string(from: next.start)) — \(next.title)"
+        }
+        return "ближайших встреч нет"
     }
 
     private var recentSection: some View {

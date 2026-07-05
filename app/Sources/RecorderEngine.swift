@@ -21,11 +21,12 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
     let finalURL: URL
     var onInterrupted: ((Error) -> Void)?
 
-    init(outputDir: URL) throws {
+    init(outputDir: URL, title: String? = nil) throws {
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH.mm"
-        let baseName = "Встреча \(formatter.string(from: Date()))"
+        let stamp = formatter.string(from: Date())
+        let baseName = title.map { "\($0) — \(stamp)" } ?? "Встреча \(stamp)"
         var url = outputDir.appendingPathComponent(baseName + ".m4a")
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {

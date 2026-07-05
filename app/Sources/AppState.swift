@@ -1,6 +1,11 @@
 import AppKit
 import Foundation
 import SwiftUI
+import UserNotifications
+
+extension Notification.Name {
+    static let meetrecStartRecording = Notification.Name("ru.dinya.meetrec.startRecording")
+}
 
 @MainActor
 final class AppState: ObservableObject {
@@ -25,6 +30,14 @@ final class AppState: ObservableObject {
     }
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
+    @Published var calendarConnected = false
+    @Published var calendarConfigured = false
+    @Published var calendarStatus: String?
+    @Published var upcomingEvents: [CalendarEvent] = []
+
+    private var calendarTimer: Timer?
+    private var notifiedEventIDs: Set<String> = []
+    private var meetingHeaders: [URL: String] = [:]
 
     weak var mainWindow: NSWindow? {
         didSet { applyWindowLevel() }
@@ -43,6 +56,102 @@ final class AppState: ObservableObject {
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
         checkModelUpdate()
+
+        calendarConfigured = GoogleOAuthConfig.load() != nil
+        calendarConnected = GoogleAuth.shared.isConnected
+        NotificationCenter.default.addObserver(
+            forName: .meetrecStartRecording, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.isRecording, !self.isSaving else { return }
+                self.toggle()
+            }
+        }
+        startCalendarPolling()
+    }
+
+    // MARK: - Google Календарь
+
+    func connectCalendar() {
+        calendarStatus = "подтвердите доступ в браузере…"
+        Task {
+            do {
+                try await GoogleAuth.shared.connect()
+                calendarConnected = true
+                calendarStatus = nil
+                errorMessage = nil
+                await requestNotificationPermission()
+                await refreshCalendar()
+            } catch {
+                calendarStatus = nil
+                errorMessage = "Google Календарь: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func disconnectCalendar() {
+        GoogleAuth.shared.disconnect()
+        calendarConnected = false
+        upcomingEvents = []
+    }
+
+    private func startCalendarPolling() {
+        calendarTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.notifyAboutStartingMeetings()
+                // Полное обновление списка — раз в 5 минут.
+                if Int(Date().timeIntervalSince1970) % 300 < 60 {
+                    await self.refreshCalendar()
+                }
+            }
+        }
+        Task { await refreshCalendar() }
+    }
+
+    func refreshCalendar() async {
+        guard calendarConnected else { return }
+        do {
+            upcomingEvents = try await GoogleCalendarClient.shared.upcomingEvents()
+        } catch {
+            // Нет сети или токен отозван — не шумим, попробуем в следующий раз.
+        }
+    }
+
+    var currentMeeting: CalendarEvent? {
+        upcomingEvents.first { $0.isNow }
+    }
+
+    var nextMeeting: CalendarEvent? {
+        upcomingEvents.first { $0.start > Date() }
+    }
+
+    // Уведомление в момент начала встречи с кнопкой «Записать».
+    private func notifyAboutStartingMeetings() {
+        guard calendarConnected, !isRecording else { return }
+        let now = Date()
+        for event in upcomingEvents
+        where event.start <= now && now < event.start.addingTimeInterval(90)
+            && !notifiedEventIDs.contains(event.id) {
+            notifiedEventIDs.insert(event.id)
+            let content = UNMutableNotificationContent()
+            content.title = "Встреча началась"
+            content.body = event.title
+            content.categoryIdentifier = "MEETING_START"
+            let request = UNNotificationRequest(
+                identifier: "meeting-\(event.id)", content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    private func requestNotificationPermission() async {
+        let center = UNUserNotificationCenter.current()
+        let record = UNNotificationAction(
+            identifier: "REC", title: "Записать", options: [.foreground])
+        let category = UNNotificationCategory(
+            identifier: "MEETING_START", actions: [record], intentIdentifiers: [])
+        center.setNotificationCategories([category])
+        _ = try? await center.requestAuthorization(options: [.alert, .sound])
     }
 
     /// Раз в сутки сверяет модель распознавания с манифестом в репозитории
@@ -120,7 +229,12 @@ final class AppState: ObservableObject {
         permissionProblem = false
         Task {
             do {
-                let engine = try RecorderEngine(outputDir: outputDir)
+                let meeting = currentMeeting
+                let title = meeting.map { sanitizeFileName($0.title) }
+                let engine = try RecorderEngine(outputDir: outputDir, title: title)
+                if let meeting {
+                    meetingHeaders[engine.finalURL] = meetingHeader(for: meeting)
+                }
                 engine.onInterrupted = { [weak self] error in
                     Task { @MainActor in self?.handleInterruption(error) }
                 }
@@ -179,9 +293,11 @@ final class AppState: ObservableObject {
     func transcribe(_ audio: URL) {
         guard transcribeProgress[audio] == nil, !hasTranscript(audio) else { return }
         transcribeProgress[audio] = "в очереди…"
+        let header = meetingHeaders[audio]
+            ?? meetingHeaders[audio.deletingPathExtension().appendingPathExtension("m4a")]
         Task {
             do {
-                _ = try await Transcriber.shared.transcribe(audio: audio) { [weak self] status in
+                _ = try await Transcriber.shared.transcribe(audio: audio, header: header) { [weak self] status in
                     Task { @MainActor in self?.transcribeProgress[audio] = status }
                 }
             } catch {
@@ -193,6 +309,25 @@ final class AppState: ObservableObject {
 
     func openTranscript(_ audio: URL) {
         NSWorkspace.shared.open(Transcriber.transcriptURL(for: audio))
+    }
+
+    private func sanitizeFileName(_ name: String) -> String {
+        let cleaned = name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(cleaned.prefix(60))
+    }
+
+    private func meetingHeader(for event: CalendarEvent) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMMM yyyy, HH:mm"
+        formatter.locale = Locale(identifier: "ru_RU")
+        var lines = ["**Встреча:** \(event.title)  ", "**Начало:** \(formatter.string(from: event.start))  "]
+        if !event.attendees.isEmpty {
+            lines.append("**Участники:** \(event.attendees.joined(separator: ", "))  ")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func handleInterruption(_ error: Error) {

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 /// Мост, чтобы AppDelegate мог открыть SwiftUI-окно после его закрытия.
 final class WindowBridge {
@@ -62,10 +63,11 @@ struct MenuContent: View {
 
 /// Приложение живёт в строке меню без значка в Dock, поэтому на запуск,
 /// повторное открытие и запуск второй копии отвечаем показом главного окна.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     static let showNotification = Notification.Name("ru.dinya.meetrec.show")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
         let bundleID = Bundle.main.bundleIdentifier ?? "ru.dinya.meetrec"
         let copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
         if copies.count > 1 {
@@ -88,6 +90,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showMainWindow()
         return true
+    }
+
+    // Клик по уведомлению «Встреча началась» / кнопке «Записать» — начать запись.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        if response.notification.request.content.categoryIdentifier == "MEETING_START" {
+            NotificationCenter.default.post(name: .meetrecStartRecording, object: nil)
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 
     @objc private func showMainWindow() {
