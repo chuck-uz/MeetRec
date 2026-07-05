@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5] — 2026-07-05
+
+### Added
+- **Launch at login**: a checkbox in the window footer registers MeetRec as a
+  login item (SMAppService), so recording is always one click away.
+
+### Fixed
+- README accuracy pass: button description matched to the actual UI, roadmap
+  section removed, architecture notes updated for video recording.
+
 ## [1.4] — 2026-07-05
 
 ### Added
