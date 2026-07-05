@@ -64,6 +64,7 @@ final class AppState: ObservableObject {
     }
     private var suppressLoginItemUpdate = false
     @Published var recordingSizeText: String?
+    @Published var chatTranscript: URL?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
     @Published var calendarConnected = false

@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6] — 2026-07-06
+
+### Added
+- **Local AI chat per meeting** (Macs with 16+ GB unified memory): a chat
+  window over any transcript — summary, action items, decisions, follow-up
+  email templates or free-form questions. Powered by a bundled static
+  `llama-server` (llama.cpp, Metal) running Qwen 2.5 7B Instruct (Q4_K_M,
+  ~4.7 GB, downloaded automatically on first use). Fully offline; the model
+  is unloaded after 5 minutes of inactivity to free memory.
+- The LLM can be swapped remotely via the `models.json` manifest (`llm` key).
+
+### Changed
+- Model downloads unified into a shared downloader (Whisper + LLM).
+
 ## [1.5] — 2026-07-05
 
 ### Added
