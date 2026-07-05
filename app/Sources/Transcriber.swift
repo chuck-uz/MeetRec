@@ -4,12 +4,33 @@ import Foundation
 final class Transcriber {
     static let shared = Transcriber()
 
-    static let modelDownloadURL = URL(
-        string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin")!
+    /// Список рекомендованных моделей — обновляется в репозитории проекта,
+    /// приложение сверяется с ним и само скачивает новую модель.
+    static let manifestURL = URL(
+        string: "https://raw.githubusercontent.com/chuck-uz/MeetRec/main/models.json")!
+
+    static var modelName: String {
+        get { UserDefaults.standard.string(forKey: "whisperModelName") ?? "ggml-large-v3-turbo.bin" }
+        set { UserDefaults.standard.set(newValue, forKey: "whisperModelName") }
+    }
+
+    static var modelTitle: String {
+        get { UserDefaults.standard.string(forKey: "whisperModelTitle") ?? "Whisper large-v3-turbo" }
+        set { UserDefaults.standard.set(newValue, forKey: "whisperModelTitle") }
+    }
+
+    static var modelDownloadURL: URL {
+        UserDefaults.standard.string(forKey: "whisperModelURL").flatMap(URL.init(string:))
+            ?? URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin")!
+    }
+
+    static var modelsDir: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MeetRec/models")
+    }
 
     static var modelURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MeetRec/models/ggml-large-v3-turbo.bin")
+        modelsDir.appendingPathComponent(modelName)
     }
 
     static func transcriptURL(for audio: URL) -> URL {
@@ -90,16 +111,67 @@ final class Transcriber {
 
     // MARK: - Модель
 
+    private struct ModelManifest: Decodable {
+        struct Model: Decodable {
+            let name: String
+            let title: String?
+            let url: String
+        }
+        let recommended: Model
+    }
+
+    /// Сверяется с манифестом в репозитории; если рекомендована другая модель —
+    /// скачивает её и переключается, старую удаляет. Возвращает true при обновлении.
+    @discardableResult
+    func updateModelIfNeeded(progress: @escaping @Sendable (String) -> Void) async throws -> Bool {
+        let request = URLRequest(
+            url: Self.manifestURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw MeetRecError("Манифест моделей недоступен.")
+        }
+        let recommended = try JSONDecoder().decode(ModelManifest.self, from: data).recommended
+        guard let sourceURL = URL(string: recommended.url) else {
+            throw MeetRecError("Некорректный адрес модели в манифесте.")
+        }
+        let alreadyCurrent = recommended.name == Self.modelName
+            && FileManager.default.fileExists(atPath: Self.modelURL.path)
+        if alreadyCurrent {
+            // Название модели могло не меняться, а заголовок — уточниться.
+            if let title = recommended.title { Self.modelTitle = title }
+            return false
+        }
+
+        progress("обновление модели…")
+        let dest = Self.modelsDir.appendingPathComponent(recommended.name)
+        try await download(from: sourceURL, to: dest, progress: progress)
+
+        let oldName = Self.modelName
+        Self.modelName = recommended.name
+        Self.modelTitle = recommended.title ?? recommended.name
+        UserDefaults.standard.set(recommended.url, forKey: "whisperModelURL")
+        if oldName != recommended.name {
+            try? FileManager.default.removeItem(at: Self.modelsDir.appendingPathComponent(oldName))
+        }
+        return true
+    }
+
     private func ensureModel(progress: @escaping @Sendable (String) -> Void) async throws {
         let dest = Self.modelURL
         if FileManager.default.fileExists(atPath: dest.path) { return }
+        progress("загрузка модели…")
+        try await download(from: Self.modelDownloadURL, to: dest, progress: progress)
+    }
+
+    private func download(
+        from source: URL, to dest: URL,
+        progress: @escaping @Sendable (String) -> Void
+    ) async throws {
         try FileManager.default.createDirectory(
             at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        progress("загрузка модели…")
-        let (bytes, response) = try await URLSession.shared.bytes(from: Self.modelDownloadURL)
+        let (bytes, response) = try await URLSession.shared.bytes(from: source)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw MeetRecError("Не удалось скачать модель распознавания (1,6 ГБ). Проверьте интернет.")
+            throw MeetRecError("Не удалось скачать модель распознавания. Проверьте интернет.")
         }
         let expected = response.expectedContentLength
         let tmp = dest.appendingPathExtension("download")

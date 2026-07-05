@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(autoTranscribe, forKey: "autoTranscribe") }
     }
     @Published var transcribeProgress: [URL: String] = [:]
+    @Published var modelStatus: String?
 
     weak var mainWindow: NSWindow? {
         didSet { applyWindowLevel() }
@@ -41,6 +42,25 @@ final class AppState: ObservableObject {
         }
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
+        checkModelUpdate()
+    }
+
+    /// Раз в сутки сверяет модель распознавания с манифестом в репозитории
+    /// и при появлении новой рекомендованной модели скачивает её в фоне.
+    func checkModelUpdate(force: Bool = false) {
+        let lastCheck = UserDefaults.standard.object(forKey: "lastModelCheck") as? Date ?? .distantPast
+        guard force || Date().timeIntervalSince(lastCheck) > 86_400 else { return }
+        Task {
+            do {
+                try await Transcriber.shared.updateModelIfNeeded { [weak self] status in
+                    Task { @MainActor in self?.modelStatus = status }
+                }
+                UserDefaults.standard.set(Date(), forKey: "lastModelCheck")
+            } catch {
+                // Нет сети или манифест недоступен — молча попробуем в другой раз.
+            }
+            modelStatus = nil
+        }
     }
 
     private func applyWindowLevel() {

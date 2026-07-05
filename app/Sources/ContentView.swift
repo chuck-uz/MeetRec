@@ -235,9 +235,10 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Автотранскрибация")
                     .font(.callout.weight(.medium))
-                Text("Текст (.md) появится рядом с записью")
+                Text(state.modelStatus ?? "\(Transcriber.modelTitle) · текст рядом с записью")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer()
             Toggle("", isOn: $state.autoTranscribe)
