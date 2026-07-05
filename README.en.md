@@ -1,0 +1,100 @@
+<div align="center">
+
+<img src="docs/icon.png" width="128" alt="MeetRec icon">
+
+# MeetRec
+
+**Record your meetings on macOS — system audio and microphone in one file, with fully local transcription.**
+
+[![Release](https://img.shields.io/github/v/release/chuck-uz/MeetRec?color=0891B2)](https://github.com/chuck-uz/MeetRec/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-15%2B-blue)](#requirements)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-native-success)](#requirements)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+
+[Русская версия](README.md)
+
+<img src="docs/screenshot.png" width="360" alt="MeetRec main window">
+
+</div>
+
+## Why MeetRec
+
+Every meeting tool records only itself. MeetRec records **any** meeting — Zoom, Google Meet, Teams, a phone call in your browser — because it captures the Mac's system audio together with your microphone and mixes them into a single `.m4a`. When the meeting ends, a text transcript with timestamps appears next to the recording. Everything happens **on your Mac**: no servers, no subscriptions, nothing leaves your machine.
+
+## Features
+
+- **One-click recording** — big red button in a compact window, or straight from the menu bar; a live timer sits next to the clock while recording.
+- **System audio + microphone** captured simultaneously via ScreenCaptureKit and mixed into one stereo AAC file (48 kHz).
+- **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
+- **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
+- **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
+- **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
+- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, no Dock icon.
+
+## Installation
+
+1. Download `MeetRec.dmg` from the [latest release](https://github.com/chuck-uz/MeetRec/releases/latest).
+2. Open it and drag **MeetRec** into **Applications**.
+3. First launch: right-click → **Open** (the app is ad-hoc signed, so Gatekeeper asks once).
+4. On the first recording, grant two permissions in *System Settings → Privacy & Security*:
+   - **Screen & System Audio Recording** — to capture meeting audio;
+   - **Microphone** — to capture your voice.
+
+The Whisper model (~1.6 GB) is downloaded automatically before the first transcription, with progress shown in the app.
+
+## Requirements
+
+- macOS 15 Sequoia or newer
+- Apple Silicon (built and tested on M-series)
+
+## Usage
+
+| Action | How |
+|---|---|
+| Start / stop recording | Click the big button, or the menu bar icon → *Начать запись* |
+| Watch recording time | Timer appears in the menu bar next to the icon |
+| Open a recording or transcript | Click it in the *Последние записи* list |
+| Transcribe an older recording | Click the ⊕-text icon in its row |
+| Keep window above Zoom | Pin icon in the window header |
+| Change output folder | *Изменить* in the folder card |
+
+## How it works
+
+```
+ScreenCaptureKit ──► system audio ─┐
+                                   ├─► AVAssetWriter (.mov, 2 tracks) ─► mixdown ─► .m4a
+AVFoundation ──────► microphone  ──┘                                                 │
+                                                                                     ▼
+                                              whisper.cpp (Metal) ─► transcript .md with timestamps
+```
+
+- The recorder writes both sources as separate tracks and mixes them down on stop; if the mixdown ever fails, the raw two-track file is kept, so a recording is never lost.
+- `whisper-cli` is statically compiled (Metal embedded, system frameworks only) and bundled inside the app — the DMG is fully self-contained.
+- Transcription runs `afconvert` → `whisper-cli` → JSON → Markdown, entirely offline.
+
+## Building from source
+
+```sh
+git clone https://github.com/chuck-uz/MeetRec.git
+cd MeetRec
+./build.sh        # produces build/MeetRec.app and dist/MeetRec.dmg
+```
+
+Requires Xcode Command Line Tools. The bundled `app/bin/whisper-cli` is a static universal-free arm64 build of whisper.cpp (`cmake -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON`); rebuild it the same way if you want to bump whisper.cpp.
+
+A minimal CLI variant also lives in the repo: `swiftc -O -parse-as-library MeetRec.swift -o meetrec && ./meetrec`.
+
+## Privacy
+
+MeetRec makes **no network requests** except two explicit ones: downloading the Whisper model from Hugging Face and checking `models.json` in this repository. Audio and transcripts never leave your Mac. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
+
+## Roadmap
+
+- Speaker diarization (“who said what”)
+- One-click “analyze in Claude” (summary, action items)
+- Optional screen video recording
+- Launch at login
+
+## License
+
+[MIT](LICENSE)
