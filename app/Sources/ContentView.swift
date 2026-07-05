@@ -1,0 +1,332 @@
+import AppKit
+import SwiftUI
+
+// Дизайн-токены (палитра «Calm cyan + health green» из ui-ux-pro-max)
+enum Design {
+    static let primary = Color(red: 0x08 / 255, green: 0x91 / 255, blue: 0xB2 / 255) // #0891B2
+    static let secondary = Color(red: 0x22 / 255, green: 0xD3 / 255, blue: 0xEE / 255) // #22D3EE
+    static let accent = Color(red: 0x05 / 255, green: 0x96 / 255, blue: 0x69 / 255) // #059669
+    static let destructive = Color(red: 0xDC / 255, green: 0x26 / 255, blue: 0x26 / 255) // #DC2626
+    static let destructiveDark = Color(red: 0xB9 / 255, green: 0x1C / 255, blue: 0x1C / 255) // #B91C1C
+    static let corner: CGFloat = 12
+}
+
+struct ContentView: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openWindow) private var openWindow
+    @State private var pulsing = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            header
+            recordButton
+            statusLine
+            if let message = state.errorMessage {
+                errorCard(message)
+            }
+            Divider()
+            folderCard
+            if !state.recentRecordings.isEmpty {
+                recentSection
+            }
+            Divider()
+            footer
+        }
+        .padding(16)
+        .padding(.top, 22) // место под кнопки закрытия окна
+        .frame(width: 320)
+        .background(WindowAccessor { window in
+            state.mainWindow = window
+            window.isMovableByWindowBackground = true
+            window.isReleasedWhenClosed = false
+        })
+        .onAppear {
+            WindowBridge.shared.open = { openWindow(id: "main") }
+        }
+    }
+
+    // MARK: - Секции
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Design.primary)
+            Text("MeetRec")
+                .font(.headline)
+            Spacer()
+            Button {
+                state.floatOnTop.toggle()
+            } label: {
+                Image(systemName: state.floatOnTop ? "pin.fill" : "pin")
+                    .foregroundStyle(state.floatOnTop ? Design.primary : .secondary)
+            }
+            .buttonStyle(.borderless)
+            .pointingCursor()
+            .help(state.floatOnTop ? "Не закреплять поверх окон" : "Закрепить поверх всех окон")
+            Text(state.isRecording ? "Запись" : (state.isSaving ? "Сохранение" : "Готов"))
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule().fill(state.isRecording
+                        ? Design.destructive.opacity(0.15)
+                        : Design.primary.opacity(0.12))
+                )
+                .foregroundStyle(state.isRecording ? Design.destructive : Design.primary)
+        }
+    }
+
+    private var recordButton: some View {
+        Button(action: state.toggle) {
+            ZStack {
+                if state.isRecording && !reduceMotion {
+                    Circle()
+                        .stroke(Design.destructive.opacity(0.35), lineWidth: 3)
+                        .frame(width: 84, height: 84)
+                        .scaleEffect(pulsing ? 1.12 : 0.98)
+                        .opacity(pulsing ? 0.2 : 0.7)
+                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulsing)
+                }
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: state.isRecording
+                                ? [Design.destructive, Design.destructiveDark]
+                                : [Design.secondary, Design.primary],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 72, height: 72)
+                    .shadow(color: (state.isRecording ? Design.destructive : Design.primary).opacity(0.35),
+                            radius: 10, y: 4)
+                if state.isSaving {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else if state.isRecording {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(.white)
+                        .frame(width: 22, height: 22)
+                } else {
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 26, height: 26)
+                }
+            }
+            .frame(width: 88, height: 88)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(state.isSaving)
+        .pointingCursor()
+        .animation(.easeInOut(duration: 0.2), value: state.isRecording)
+        .onChange(of: state.isRecording) { _, recording in
+            pulsing = recording
+        }
+        .accessibilityLabel(state.isRecording ? "Остановить запись" : "Начать запись")
+    }
+
+    private var statusLine: some View {
+        Group {
+            if state.isRecording {
+                Text(state.elapsedText)
+                    .font(.system(size: 26, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            } else if state.isSaving {
+                Text("Сводим дорожки и сохраняем…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if let saved = state.lastSaved {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([saved])
+                } label: {
+                    Label {
+                        Text("Сохранено: \(saved.deletingPathExtension().lastPathComponent)")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Design.accent)
+                    }
+                    .font(.callout)
+                }
+                .buttonStyle(.plain)
+                .pointingCursor()
+                .help("Показать файл в Finder")
+            } else {
+                Text("Нажмите, чтобы записать встречу")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(Design.destructive)
+            if state.permissionProblem {
+                Text("Разрешите MeetRec запись в разделе «Запись экрана и системного звука», затем попробуйте снова.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Открыть настройки конфиденциальности") {
+                    state.openPermissionSettings()
+                }
+                .controlSize(.small)
+                .pointingCursor()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Design.destructive.opacity(0.08))
+        )
+    }
+
+    private var folderCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: folderIsGoogleDrive ? "icloud.fill" : "folder.fill")
+                .foregroundStyle(Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(folderIsGoogleDrive ? "Google Диск" : "Папка записей")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(state.outputDir.lastPathComponent)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button {
+                state.openFolder()
+            } label: {
+                Image(systemName: "arrow.up.forward.square")
+            }
+            .buttonStyle(.borderless)
+            .pointingCursor()
+            .help("Открыть папку в Finder")
+            Button("Изменить") {
+                state.chooseFolder()
+            }
+            .controlSize(.small)
+            .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private var folderIsGoogleDrive: Bool {
+        state.outputDir.path.contains("/CloudStorage/GoogleDrive-")
+    }
+
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Последние записи")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(state.recentRecordings, id: \.self) { url in
+                RecentRow(url: url)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("Системный звук + микрофон")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Spacer()
+            Button("Завершить") {
+                state.quit()
+            }
+            .controlSize(.small)
+            .pointingCursor()
+            .help(state.isRecording ? "Запись будет остановлена и сохранена" : "Выйти из MeetRec")
+        }
+    }
+}
+
+private struct RecentRow: View {
+    let url: URL
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            NSWorkspace.shared.open(url)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform")
+                    .font(.caption)
+                    .foregroundStyle(Design.primary)
+                Text(url.deletingPathExtension().lastPathComponent)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Image(systemName: "play.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(hovering ? 0.08 : 0))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .pointingCursor()
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.15), value: hovering)
+        .help("Открыть запись")
+    }
+}
+
+// Курсор-«рука» на кликабельных элементах
+private struct PointingCursor: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+extension View {
+    func pointingCursor() -> some View {
+        modifier(PointingCursor())
+    }
+}
+
+/// Даёт доступ к NSWindow, в котором находится SwiftUI-иерархия.
+struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onWindow(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                onWindow(window)
+            }
+        }
+    }
+}
