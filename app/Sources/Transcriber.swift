@@ -54,7 +54,7 @@ final class Transcriber {
     private var running: [Process] = []
 
     func transcribe(
-        audio: URL, header: String? = nil,
+        audio: URL, header: String? = nil, diarize: Bool = false,
         progress: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
         guard let cli = Self.whisperCLI() else {
@@ -97,7 +97,20 @@ final class Transcriber {
 
         let data = try Data(contentsOf: json)
         let parsed = try JSONDecoder().decode(WhisperOutput.self, from: data)
-        let markdown = renderMarkdown(audio: audio, segments: parsed.transcription, header: header)
+
+        var speakers: [DiarizationService.SpeakerSegment] = []
+        if diarize {
+            do {
+                speakers = try await DiarizationService.shared.diarize(wav: wav, progress: progress)
+            } catch {
+                // Диаризация — необязательное улучшение: при сбое сохраняем обычный транскрипт.
+                speakers = []
+            }
+        }
+
+        let markdown = speakers.isEmpty
+            ? renderMarkdown(audio: audio, segments: parsed.transcription, header: header)
+            : renderDialog(audio: audio, segments: parsed.transcription, speakers: speakers, header: header)
         let out = Self.transcriptURL(for: audio)
         try markdown.data(using: .utf8)!.write(to: out)
         return out
@@ -260,6 +273,66 @@ final class Transcriber {
             lines.append("")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Транскрипт в виде диалога: реплики сгруппированы по говорящим.
+    private func renderDialog(
+        audio: URL,
+        segments: [WhisperOutput.Segment],
+        speakers: [DiarizationService.SpeakerSegment],
+        header: String?
+    ) -> String {
+        var lines = ["# \(audio.deletingPathExtension().lastPathComponent)", ""]
+        if let header, !header.isEmpty {
+            lines.append(header)
+            lines.append("")
+        }
+
+        var currentSpeaker: String?
+        var paragraph: [String] = []
+        var paragraphStart = 0
+
+        func flush() {
+            guard !paragraph.isEmpty else { return }
+            let label = currentSpeaker ?? "Спикер ?"
+            lines.append("**\(label) [\(timestamp(paragraphStart))]:** \(paragraph.joined(separator: " "))")
+            lines.append("")
+            paragraph = []
+        }
+
+        for segment in segments {
+            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let speaker = dominantSpeaker(
+                fromMs: segment.offsets.from, toMs: segment.offsets.to, in: speakers)
+                ?? currentSpeaker
+            if speaker != currentSpeaker {
+                flush()
+                currentSpeaker = speaker
+                paragraphStart = segment.offsets.from
+            }
+            if paragraph.isEmpty {
+                paragraphStart = segment.offsets.from
+            }
+            paragraph.append(text)
+        }
+        flush()
+        return lines.joined(separator: "\n")
+    }
+
+    /// Говорящий с максимальным пересечением по времени с данным сегментом.
+    private func dominantSpeaker(
+        fromMs: Int, toMs: Int, in speakers: [DiarizationService.SpeakerSegment]
+    ) -> String? {
+        let from = Double(fromMs) / 1000, to = Double(toMs) / 1000
+        var best: (speaker: String, overlap: Double)?
+        for speaker in speakers {
+            let overlap = min(to, speaker.end) - max(from, speaker.start)
+            if overlap > 0, overlap > (best?.overlap ?? 0) {
+                best = (speaker.speaker, overlap)
+            }
+        }
+        return best?.speaker
     }
 
     private func timestamp(_ milliseconds: Int) -> String {

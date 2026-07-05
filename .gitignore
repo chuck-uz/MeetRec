@@ -6,3 +6,4 @@ build/
 dist/
 v1.0/
 /meetrec
+.build/

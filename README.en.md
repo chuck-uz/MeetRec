@@ -27,6 +27,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **System audio + microphone** captured simultaneously via ScreenCaptureKit and mixed into one stereo AAC file (48 kHz).
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
+- **Speaker diarization (optional)** — transcripts as a dialog, «Спикер 1 / Спикер 2…» ([FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML, fully on-device; ~30 MB models download automatically).
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
@@ -82,6 +83,7 @@ Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keycha
 | Watch recording time | Timer appears in the menu bar next to the icon |
 | Open a recording or transcript | Click it in the *Последние записи* list |
 | Transcribe an older recording | Click the ⊕-text icon in its row |
+| Label speakers in transcripts | «Диаризация» toggle |
 | Keep window above Zoom | Pin icon in the window header |
 | Change output folder | *Изменить* in the folder card |
 | Record screen video | «Видео экрана» toggle before starting |
@@ -115,11 +117,10 @@ A minimal CLI variant also lives in the repo: `swiftc -O -parse-as-library MeetR
 
 ## Privacy
 
-MeetRec makes **no network requests** except two explicit ones: downloading the Whisper model from Hugging Face and checking `models.json` in this repository. Audio and transcripts never leave your Mac. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
+MeetRec only goes online to fetch models (Whisper and diarization — from Hugging Face, once) and the recommended-models manifest `models.json` in this repository; with Google Calendar connected, it also calls the Calendar API (read-only). Audio and transcripts never leave your Mac. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
 
 ## Roadmap
 
-- Speaker diarization (“who said what”)
 - One-click “analyze in Claude” (summary, action items)
 - Window/display picker for video recording
 - Launch at login

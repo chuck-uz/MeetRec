@@ -32,6 +32,9 @@ final class AppState: ObservableObject {
     @Published var captureVideo: Bool {
         didSet { UserDefaults.standard.set(captureVideo, forKey: "captureVideo") }
     }
+    @Published var diarize: Bool {
+        didSet { UserDefaults.standard.set(diarize, forKey: "diarize") }
+    }
     @Published var recordingSizeText: String?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
@@ -61,6 +64,7 @@ final class AppState: ObservableObject {
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
         captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
+        diarize = UserDefaults.standard.bool(forKey: "diarize")
         Self.shared = self
         checkModelUpdate()
 
@@ -328,9 +332,10 @@ final class AppState: ObservableObject {
         transcribeProgress[audio] = "в очереди…"
         let header = meetingHeaders[audio]
             ?? meetingHeaders[audio.deletingPathExtension().appendingPathExtension("m4a")]
+        let diarize = self.diarize
         Task {
             do {
-                _ = try await Transcriber.shared.transcribe(audio: audio, header: header) { [weak self] status in
+                _ = try await Transcriber.shared.transcribe(audio: audio, header: header, diarize: diarize) { [weak self] status in
                     Task { @MainActor in self?.transcribeProgress[audio] = status }
                 }
             } catch {

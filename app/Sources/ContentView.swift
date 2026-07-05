@@ -29,6 +29,7 @@ struct ContentView: View {
             folderCard
             videoCard
             transcribeCard
+            diarizeCard
             calendarCard
             if !state.recentRecordings.isEmpty {
                 recentSection
@@ -280,6 +281,33 @@ struct ContentView: View {
             }
             Spacer()
             Toggle("", isOn: $state.autoTranscribe)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.accent)
+                .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private var diarizeCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.2")
+                .foregroundStyle(state.diarize ? Design.accent : Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Диаризация")
+                    .font(.callout.weight(.medium))
+                Text(state.diarize ? "транскрипт как диалог: Спикер 1 / Спикер 2…" : "транскрипт без разметки говорящих")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Toggle("", isOn: $state.diarize)
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()

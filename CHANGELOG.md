@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4] — 2026-07-05
+
+### Added
+- **Speaker diarization** (optional toggle): transcripts become a dialog —
+  «Спикер 1 [00:12]: …» — powered by [FluidAudio](https://github.com/FluidInference/FluidAudio)
+  CoreML models (pyannote-based), fully on-device. Models (~30 MB) download
+  automatically on first use. If diarization fails, the plain transcript is
+  saved unchanged.
+
+### Changed
+- Build migrated from a plain `swiftc` invocation to Swift Package Manager
+  (`Package.swift`); `./build.sh` works as before.
+
 ## [1.3] — 2026-07-05
 
 ### Added
