@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-07-05
+
+### Changed
+- MeetRec now appears in the Dock and Cmd+Tab and can be kept in the Dock;
+  the menu bar icon with the recording timer remains.
+- Quitting via Cmd+Q or the Dock during a recording now stops and saves the
+  recording before the app exits.
+
 ## [1.2] — 2026-07-05
 
 ### Added
