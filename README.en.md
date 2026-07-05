@@ -29,6 +29,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
+- **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
 - **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, no Dock icon.
 
 ## Installation
@@ -41,6 +42,31 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
    - **Microphone** — to capture your voice.
 
 The Whisper model (~1.6 GB) is downloaded automatically before the first transcription, with progress shown in the app.
+
+## Google Calendar (optional)
+
+With the calendar connected, MeetRec:
+
+- names recordings after the current meeting — "Platform sync — 2026-07-05 15.00.m4a" instead of a bare date;
+- adds the meeting title, time and attendees to the transcript header;
+- shows your next meeting in the window;
+- sends a "Meeting started" notification with a one-click **Record** button.
+
+Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keychain and never leave your machine.
+
+> **⏳ Status: the app is going through Google's verification process.** Until it
+> completes, OAuth credentials are not bundled — each user needs their own (free)
+> OAuth client. It takes ~10 minutes:
+>
+> 1. Create a project in the [Google Cloud Console](https://console.cloud.google.com) and enable the **Google Calendar API**.
+> 2. Configure the OAuth consent screen (External) and publish it **In production**.
+> 3. Create an OAuth client of type **Desktop app**.
+> 4. Copy [google_oauth.example.json](google_oauth.example.json) to
+>    `~/Library/Application Support/MeetRec/google_oauth.json` and fill in your `client_id` and `client_secret`.
+> 5. Click **«Подключить»** in the calendar card in MeetRec; on the
+>    "Google hasn't verified this app" warning choose *Advanced → Continue* (it's your own app).
+>
+> Once verification is complete, the calendar will work out of the box.
 
 ## Requirements
 

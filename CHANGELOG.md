@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2] — 2026-07-05
+
+### Added
+- **Google Calendar integration** (OAuth 2.0 PKCE with loopback redirect, tokens
+  in the macOS Keychain, read-only scope):
+  - recordings are automatically named after the current meeting;
+  - transcript header includes meeting title, time and attendees;
+  - the next meeting is shown in the main window;
+  - a "Meeting started" notification offers one-click recording.
+- OAuth client credentials are read from a local `google_oauth.json`
+  (never bundled or committed); `google_oauth.example.json` documents the format.
+
+### Notes
+- Google verification is in progress; until it completes, each user needs their
+  own OAuth client for the calendar features (see README).
+
 ## [1.1] — 2026-07-05
 
 ### Added
