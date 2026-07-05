@@ -9,6 +9,7 @@ extension Notification.Name {
 
 @MainActor
 final class AppState: ObservableObject {
+    static private(set) weak var shared: AppState?
     @Published var isRecording = false
     @Published var isSaving = false
     @Published var elapsed: TimeInterval = 0
@@ -55,6 +56,7 @@ final class AppState: ObservableObject {
         }
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
+        Self.shared = self
         checkModelUpdate()
 
         calendarConfigured = GoogleOAuthConfig.load() != nil
