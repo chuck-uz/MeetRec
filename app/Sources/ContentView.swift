@@ -27,6 +27,7 @@ struct ContentView: View {
             }
             Divider()
             folderCard
+            transcribeCard
             if !state.recentRecordings.isEmpty {
                 recentSection
             }
@@ -227,6 +228,32 @@ struct ContentView: View {
         state.outputDir.path.contains("/CloudStorage/GoogleDrive-")
     }
 
+    private var transcribeCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "text.quote")
+                .foregroundStyle(Design.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Автотранскрибация")
+                    .font(.callout.weight(.medium))
+                Text("Текст (.md) появится рядом с записью")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: $state.autoTranscribe)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.accent)
+                .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Последние записи")
@@ -257,39 +284,80 @@ struct ContentView: View {
 
 private struct RecentRow: View {
     let url: URL
+    @EnvironmentObject var state: AppState
     @State private var hovering = false
 
     var body: some View {
-        Button {
-            NSWorkspace.shared.open(url)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform")
-                    .font(.caption)
-                    .foregroundStyle(Design.primary)
-                Text(url.deletingPathExtension().lastPathComponent)
-                    .font(.callout)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                Image(systemName: "play.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .opacity(hovering ? 1 : 0)
+        HStack(spacing: 8) {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .font(.caption)
+                        .foregroundStyle(Design.primary)
+                    Text(url.deletingPathExtension().lastPathComponent)
+                        .font(.callout)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Image(systemName: "play.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .opacity(hovering ? 1 : 0)
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.primary.opacity(hovering ? 0.08 : 0))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .buttonStyle(.plain)
+            .pointingCursor()
+            .help("Открыть запись")
+
+            transcriptControl
         }
-        .buttonStyle(.plain)
-        .pointingCursor()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(hovering ? 0.08 : 0))
+        )
         .onHover { hovering = $0 }
         .animation(.easeInOut(duration: 0.15), value: hovering)
-        .help("Открыть запись")
+    }
+
+    @ViewBuilder
+    private var transcriptControl: some View {
+        if let progress = state.transcribeProgress[url] {
+            HStack(spacing: 4) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text(progress)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } else if state.hasTranscript(url) {
+            Button {
+                state.openTranscript(url)
+            } label: {
+                Image(systemName: "doc.text")
+                    .font(.caption)
+                    .foregroundStyle(Design.accent)
+            }
+            .buttonStyle(.borderless)
+            .pointingCursor()
+            .help("Открыть транскрипт")
+        } else {
+            Button {
+                state.transcribe(url)
+            } label: {
+                Image(systemName: "text.badge.plus")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .pointingCursor()
+            .help("Транскрибировать")
+        }
     }
 }
 

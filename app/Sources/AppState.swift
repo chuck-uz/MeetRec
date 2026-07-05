@@ -20,6 +20,10 @@ final class AppState: ObservableObject {
             applyWindowLevel()
         }
     }
+    @Published var autoTranscribe: Bool {
+        didSet { UserDefaults.standard.set(autoTranscribe, forKey: "autoTranscribe") }
+    }
+    @Published var transcribeProgress: [URL: String] = [:]
 
     weak var mainWindow: NSWindow? {
         didSet { applyWindowLevel() }
@@ -36,6 +40,7 @@ final class AppState: ObservableObject {
             outputDir = Self.defaultOutputDir()
         }
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
+        autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
     }
 
     private func applyWindowLevel() {
@@ -135,11 +140,39 @@ final class AppState: ObservableObject {
             do {
                 lastSaved = try await engine.stop()
                 errorMessage = nil
+                if autoTranscribe, let saved = lastSaved {
+                    transcribe(saved)
+                }
             } catch {
                 errorMessage = "Ошибка при сохранении: \(error.localizedDescription)"
             }
             self.engine = nil
         }
+    }
+
+    // MARK: - Транскрибация
+
+    func hasTranscript(_ audio: URL) -> Bool {
+        FileManager.default.fileExists(atPath: Transcriber.transcriptURL(for: audio).path)
+    }
+
+    func transcribe(_ audio: URL) {
+        guard transcribeProgress[audio] == nil, !hasTranscript(audio) else { return }
+        transcribeProgress[audio] = "в очереди…"
+        Task {
+            do {
+                _ = try await Transcriber.shared.transcribe(audio: audio) { [weak self] status in
+                    Task { @MainActor in self?.transcribeProgress[audio] = status }
+                }
+            } catch {
+                errorMessage = "Транскрибация: \(error.localizedDescription)"
+            }
+            transcribeProgress[audio] = nil
+        }
+    }
+
+    func openTranscript(_ audio: URL) {
+        NSWorkspace.shared.open(Transcriber.transcriptURL(for: audio))
     }
 
     private func handleInterruption(_ error: Error) {
@@ -177,6 +210,7 @@ final class AppState: ObservableObject {
     }
 
     func quit() {
+        Transcriber.shared.cancelAll()
         if isRecording, let engine {
             isRecording = false
             timer?.invalidate()

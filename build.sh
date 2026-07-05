@@ -10,6 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" dist
 echo "→ Компиляция…"
 swiftc -O -parse-as-library app/Sources/*.swift -o "$APP/Contents/MacOS/MeetRec"
 cp app/Info.plist "$APP/Contents/Info.plist"
+cp app/bin/whisper-cli "$APP/Contents/MacOS/whisper-cli"
 
 echo "→ Иконка…"
 if [ ! -f app/AppIcon.icns ]; then
@@ -26,6 +27,7 @@ fi
 cp app/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 echo "→ Подпись (ad-hoc)…"
+codesign --force -s - "$APP/Contents/MacOS/whisper-cli"
 codesign --force --deep -s - "$APP"
 
 echo "→ Установщик DMG…"
