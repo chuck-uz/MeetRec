@@ -3,5 +3,10 @@
     "name": "ggml-large-v3-turbo.bin",
     "title": "Whisper large-v3-turbo",
     "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+  },
+  "llm": {
+    "file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+    "title": "Qwen 2.5 7B",
+    "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
   }
 }

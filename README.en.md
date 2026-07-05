@@ -28,6 +28,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
 - **Speaker diarization (optional)** — transcripts as a dialog, «Спикер 1 / Спикер 2…» ([FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML, fully on-device; ~30 MB models download automatically).
+- **Local AI chat per meeting** (Macs with 16+ GB memory) — summaries, action items, decisions, follow-up drafts or free-form questions over any transcript. Qwen 2.5 7B via bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) (Metal); the ~4.7 GB model downloads on first use and unloads after 5 idle minutes. Answers never leave your Mac.
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
@@ -84,6 +85,7 @@ Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keycha
 | Open a recording or transcript | Click it in the *Последние записи* list |
 | Transcribe an older recording | Click the ⊕-text icon in its row |
 | Label speakers in transcripts | «Диаризация» toggle |
+| Chat with AI about a meeting | 💬 icon in a transcribed recording's row |
 | Keep window above Zoom | Pin icon in the window header |
 | Change output folder | *Изменить* in the folder card |
 | Record screen video | «Видео экрана» toggle before starting |

@@ -133,7 +133,13 @@ final class Transcriber {
             let title: String?
             let url: String
         }
+        struct LLMModel: Decodable {
+            let file: String
+            let title: String?
+            let url: String
+        }
         let recommended: Model
+        let llm: LLMModel?
     }
 
     /// Сверяется с манифестом в репозитории; если рекомендована другая модель —
@@ -146,7 +152,13 @@ final class Transcriber {
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw MeetRecError("Манифест моделей недоступен.")
         }
-        let recommended = try JSONDecoder().decode(ModelManifest.self, from: data).recommended
+        let manifest = try JSONDecoder().decode(ModelManifest.self, from: data)
+        if let llm = manifest.llm {
+            UserDefaults.standard.set(llm.file, forKey: "llmModelFile")
+            UserDefaults.standard.set(llm.url, forKey: "llmModelURL")
+            UserDefaults.standard.set(llm.title ?? llm.file, forKey: "llmModelTitle")
+        }
+        let recommended = manifest.recommended
         guard let sourceURL = URL(string: recommended.url) else {
             throw MeetRecError("Некорректный адрес модели в манифесте.")
         }
@@ -160,7 +172,7 @@ final class Transcriber {
 
         progress("обновление модели…")
         let dest = Self.modelsDir.appendingPathComponent(recommended.name)
-        try await download(from: sourceURL, to: dest, progress: progress)
+        try await Downloader.fetch(from: sourceURL, to: dest, label: "модель", progress: progress)
 
         let oldName = Self.modelName
         Self.modelName = recommended.name
@@ -176,42 +188,8 @@ final class Transcriber {
         let dest = Self.modelURL
         if FileManager.default.fileExists(atPath: dest.path) { return }
         progress("загрузка модели…")
-        try await download(from: Self.modelDownloadURL, to: dest, progress: progress)
-    }
-
-    private func download(
-        from source: URL, to dest: URL,
-        progress: @escaping @Sendable (String) -> Void
-    ) async throws {
-        try FileManager.default.createDirectory(
-            at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let (bytes, response) = try await URLSession.shared.bytes(from: source)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw MeetRecError("Не удалось скачать модель распознавания. Проверьте интернет.")
-        }
-        let expected = response.expectedContentLength
-        let tmp = dest.appendingPathExtension("download")
-        FileManager.default.createFile(atPath: tmp.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: tmp)
-        defer { try? handle.close() }
-
-        var buffer = Data()
-        buffer.reserveCapacity(4 << 20)
-        var written: Int64 = 0
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= (4 << 20) {
-                try handle.write(contentsOf: buffer)
-                written += Int64(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
-                if expected > 0 {
-                    progress("модель \(Int(Double(written) / Double(expected) * 100))%")
-                }
-            }
-        }
-        try handle.write(contentsOf: buffer)
-        try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.moveItem(at: tmp, to: dest)
+        try await Downloader.fetch(
+            from: Self.modelDownloadURL, to: dest, label: "модель", progress: progress)
     }
 
     // MARK: - Запуск процессов

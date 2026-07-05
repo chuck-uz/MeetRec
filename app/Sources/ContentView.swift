@@ -430,6 +430,7 @@ struct ContentView: View {
 private struct RecentRow: View {
     let url: URL
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     @State private var hovering = false
 
     var body: some View {
@@ -493,6 +494,20 @@ private struct RecentRow: View {
                     .lineLimit(1)
             }
         } else if state.hasTranscript(url) {
+            if Hardware.supportsChat {
+                Button {
+                    state.chatTranscript = Transcriber.transcriptURL(for: url)
+                    openWindow(id: "chat")
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    Image(systemName: "bubble.left.and.text.bubble.right")
+                        .font(.caption)
+                        .foregroundStyle(Design.primary)
+                }
+                .buttonStyle(.borderless)
+                .pointingCursor()
+                .help("Чат с ИИ по этой встрече")
+            }
             Button {
                 state.openTranscript(url)
             } label: {

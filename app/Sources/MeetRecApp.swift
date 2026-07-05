@@ -22,6 +22,12 @@ struct MeetRecApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window("Чат по встрече", id: "chat") {
+            ChatView()
+                .environmentObject(state)
+        }
+        .defaultLaunchBehavior(.suppressed)
+
         MenuBarExtra {
             MenuContent()
                 .environmentObject(state)
@@ -107,6 +113,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    // Гасим дочерний llama-server при выходе, чтобы не оставлять процесс-сироту.
+    func applicationWillTerminate(_ notification: Notification) {
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await LLMRuntime.shared.shutdown()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 2)
     }
 
     // Клик по уведомлению «Встреча началась» / кнопке «Записать» — начать запись.

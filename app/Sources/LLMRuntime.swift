@@ -1,0 +1,193 @@
+// Локальная LLM для чата по встречам: llama-server (llama.cpp, Metal) как
+// дочерний процесс на 127.0.0.1. Всё на устройстве, данные не покидают Mac.
+import Foundation
+
+enum Hardware {
+    static let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+    /// Чат с ИИ доступен от 16 ГБ unified memory (модель ~4,7 ГБ + KV-кэш).
+    static let supportsChat = ramGB >= 16
+}
+
+struct LLMSpec {
+    let file: String
+    let url: String
+    let title: String
+
+    static let fallback = LLMSpec(
+        file: "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        title: "Qwen 2.5 7B")
+
+    /// Текущая модель; может обновляться манифестом models.json.
+    static var current: LLMSpec {
+        let defaults = UserDefaults.standard
+        guard let file = defaults.string(forKey: "llmModelFile"),
+              let url = defaults.string(forKey: "llmModelURL"), !file.isEmpty else {
+            return .fallback
+        }
+        return LLMSpec(file: file, url: url,
+                       title: defaults.string(forKey: "llmModelTitle") ?? file)
+    }
+}
+
+struct ChatTurn: Sendable {
+    enum Role: String, Sendable { case system, user, assistant }
+    let role: Role
+    let text: String
+}
+
+actor LLMRuntime {
+    static let shared = LLMRuntime()
+
+    private var server: Process?
+    private var port: Int = 0
+    private var loadedModel: String?
+    private var lastUse = Date()
+    private var idleWatcher: Task<Void, Never>?
+
+    static var modelURL: URL {
+        Transcriber.modelsDir.appendingPathComponent(LLMSpec.current.file)
+    }
+
+    static func serverBinary() -> URL? {
+        if let aux = Bundle.main.url(forAuxiliaryExecutable: "llama-server"),
+           FileManager.default.isExecutableFile(atPath: aux.path) {
+            return aux
+        }
+        for path in ["/opt/homebrew/bin/llama-server", "/usr/local/bin/llama-server"]
+        where FileManager.default.isExecutableFile(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return nil
+    }
+
+    // MARK: - Генерация (OpenAI-совместимый стриминг)
+
+    func generate(
+        turns: [ChatTurn],
+        onToken: @escaping @Sendable (String) -> Void,
+        onStatus: @escaping @Sendable (String) -> Void
+    ) async throws {
+        let port = try await ensureServer(onStatus: onStatus)
+        lastUse = Date()
+        onStatus("думаю…")
+
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 600
+        let body: [String: Any] = [
+            "messages": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
+            "stream": true,
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "max_tokens": 2048,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw MeetRecError("Локальная модель вернула ошибку. Попробуйте ещё раз.")
+        }
+
+        struct Delta: Decodable {
+            struct Choice: Decodable {
+                struct Content: Decodable { let content: String? }
+                let delta: Content?
+            }
+            let choices: [Choice]
+        }
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data: ") else { continue }
+            let payload = line.dropFirst(6)
+            if payload == "[DONE]" { break }
+            if Task.isCancelled { break }
+            if let data = payload.data(using: .utf8),
+               let chunk = try? JSONDecoder().decode(Delta.self, from: data),
+               let token = chunk.choices.first?.delta?.content, !token.isEmpty {
+                onToken(token)
+            }
+        }
+        lastUse = Date()
+        scheduleIdleShutdown()
+    }
+
+    /// Останавливает llama-server — освобождает ~6 ГБ памяти.
+    func shutdown() {
+        server?.terminate()
+        server = nil
+        loadedModel = nil
+    }
+
+    // MARK: - Сервер
+
+    private func ensureServer(onStatus: @escaping @Sendable (String) -> Void) async throws -> Int {
+        let spec = LLMSpec.current
+        if let server, server.isRunning, loadedModel == spec.file {
+            return port
+        }
+        shutdown()
+
+        guard let binary = Self.serverBinary() else {
+            throw MeetRecError("Не найден llama-server. Переустановите MeetRec.")
+        }
+        let modelPath = Self.modelURL
+        if !FileManager.default.fileExists(atPath: modelPath.path) {
+            onStatus("скачивание модели \(spec.title) (~4,7 ГБ)…")
+            guard let url = URL(string: spec.url) else {
+                throw MeetRecError("Некорректный адрес модели.")
+            }
+            try await Downloader.fetch(from: url, to: modelPath, label: "модель \(spec.title)", progress: onStatus)
+        }
+
+        onStatus("загрузка модели в память…")
+        let chosenPort = Int.random(in: 49500..<64000)
+        let process = Process()
+        process.executableURL = binary
+        process.arguments = [
+            "-m", modelPath.path,
+            "--host", "127.0.0.1",
+            "--port", "\(chosenPort)",
+            "-c", "16384",       // контекст 16К — баланс память/длина транскрипта
+            "-ngl", "99",        // все слои на GPU (Metal)
+            "--no-webui",
+        ]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        server = process
+        port = chosenPort
+        loadedModel = spec.file
+
+        // Ждём готовности (загрузка 7B с SSD — до ~20 с).
+        let health = URL(string: "http://127.0.0.1:\(chosenPort)/health")!
+        for _ in 0..<240 {
+            if !process.isRunning {
+                throw MeetRecError("llama-server завершился при запуске. Возможно, не хватает памяти.")
+            }
+            if let (_, response) = try? await URLSession.shared.data(from: health),
+               (response as? HTTPURLResponse)?.statusCode == 200 {
+                return chosenPort
+            }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+        shutdown()
+        throw MeetRecError("Модель не загрузилась за отведённое время.")
+    }
+
+    /// Гасим сервер после 5 минут простоя.
+    private func scheduleIdleShutdown() {
+        idleWatcher?.cancel()
+        idleWatcher = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            await self.shutdownIfIdle()
+        }
+    }
+
+    private func shutdownIfIdle() {
+        if Date().timeIntervalSince(lastUse) >= 5 * 60 {
+            shutdown()
+        }
+    }
+}

@@ -31,6 +31,7 @@ swift build -c release
 cp .build/release/MeetRec "$APP/Contents/MacOS/MeetRec"
 cp app/Info.plist "$APP/Contents/Info.plist"
 cp app/bin/whisper-cli "$APP/Contents/MacOS/whisper-cli"
+cp app/bin/llama-server "$APP/Contents/MacOS/llama-server"
 
 echo "→ Иконка…"
 if [ ! -f app/AppIcon.icns ]; then
@@ -58,6 +59,8 @@ if security find-identity -v -p codesigning | grep -q "\"$SIGN_IDENTITY\""; then
   codesign --force -s "$SIGN_IDENTITY" \
     -i ru.dinya.meetrec.whisper-cli "$APP/Contents/MacOS/whisper-cli"
   codesign --force -s "$SIGN_IDENTITY" \
+    -i ru.dinya.meetrec.llama-server "$APP/Contents/MacOS/llama-server"
+  codesign --force -s "$SIGN_IDENTITY" \
     -i ru.dinya.meetrec "$APP"
 else
   echo "⚠️  Сертификат «$SIGN_IDENTITY» не найден — подпись ad-hoc."
@@ -65,6 +68,9 @@ else
   codesign --force -s - -i ru.dinya.meetrec.whisper-cli \
     -r='designated => identifier "ru.dinya.meetrec.whisper-cli"' \
     "$APP/Contents/MacOS/whisper-cli"
+  codesign --force -s - -i ru.dinya.meetrec.llama-server \
+    -r='designated => identifier "ru.dinya.meetrec.llama-server"' \
+    "$APP/Contents/MacOS/llama-server"
   codesign --force -s - -i ru.dinya.meetrec \
     -r='designated => identifier "ru.dinya.meetrec"' \
     "$APP"
