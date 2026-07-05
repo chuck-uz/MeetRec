@@ -92,6 +92,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    // Cmd+Q / «Завершить» из Dock во время записи: сначала сохранить, потом выйти.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let state = AppState.shared, state.isRecording || state.isSaving else {
+            return .terminateNow
+        }
+        Task { @MainActor in
+            if state.isRecording {
+                state.stopAndSave()
+            }
+            while state.isRecording || state.isSaving {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     // Клик по уведомлению «Встреча началась» / кнопке «Записать» — начать запись.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
