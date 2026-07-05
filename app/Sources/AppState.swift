@@ -29,6 +29,10 @@ final class AppState: ObservableObject {
     @Published var autoTranscribe: Bool {
         didSet { UserDefaults.standard.set(autoTranscribe, forKey: "autoTranscribe") }
     }
+    @Published var captureVideo: Bool {
+        didSet { UserDefaults.standard.set(captureVideo, forKey: "captureVideo") }
+    }
+    @Published var recordingSizeText: String?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
     @Published var calendarConnected = false
@@ -56,6 +60,7 @@ final class AppState: ObservableObject {
         }
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
+        captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
         Self.shared = self
         checkModelUpdate()
 
@@ -209,10 +214,28 @@ final class AppState: ObservableObject {
             options: .skipsHiddenFiles
         ) else { return [] }
         return items
-            .filter { ["m4a", "mov"].contains($0.pathExtension.lowercased()) }
+            .filter { ["m4a", "mov", "mp4"].contains($0.pathExtension.lowercased()) }
+            // Видеофайл с аудио-собратом не показываем отдельной строкой.
+            .filter { url in
+                guard url.pathExtension.lowercased() != "m4a" else { return true }
+                let sibling = url.deletingPathExtension().appendingPathExtension("m4a")
+                return !fm.fileExists(atPath: sibling.path)
+            }
             .sorted { modDate($0) > modDate($1) }
             .prefix(4)
             .map { $0 }
+    }
+
+    /// Видеофайл, записанный вместе с этой аудиозаписью.
+    func videoURL(for audio: URL) -> URL? {
+        let base = audio.deletingPathExtension()
+        for ext in ["mp4", "mov"] {
+            let candidate = base.appendingPathExtension(ext)
+            if candidate != audio, FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     private func modDate(_ url: URL) -> Date {
@@ -233,7 +256,7 @@ final class AppState: ObservableObject {
             do {
                 let meeting = currentMeeting
                 let title = meeting.map { sanitizeFileName($0.title) }
-                let engine = try RecorderEngine(outputDir: outputDir, title: title)
+                let engine = try RecorderEngine(outputDir: outputDir, title: title, captureVideo: captureVideo)
                 if let meeting {
                     meetingHeaders[engine.finalURL] = meetingHeader(for: meeting)
                 }
@@ -249,6 +272,10 @@ final class AppState: ObservableObject {
                     Task { @MainActor in
                         guard let self, let startedAt = self.startedAt else { return }
                         self.elapsed = Date().timeIntervalSince(startedAt)
+                        if self.captureVideo, let temp = self.engine?.tempURL,
+                           let bytes = (try? FileManager.default.attributesOfItem(atPath: temp.path))?[.size] as? Int64 {
+                            self.recordingSizeText = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        }
                     }
                 }
             } catch {
@@ -272,12 +299,16 @@ final class AppState: ObservableObject {
         timer?.invalidate()
         timer = nil
         Task {
-            defer { isSaving = false }
+            defer {
+                isSaving = false
+                recordingSizeText = nil
+            }
             do {
-                lastSaved = try await engine.stop()
+                let result = try await engine.stop()
+                lastSaved = result.audioURL
                 errorMessage = nil
-                if autoTranscribe, let saved = lastSaved {
-                    transcribe(saved)
+                if autoTranscribe {
+                    transcribe(result.audioURL)
                 }
             } catch {
                 errorMessage = "Ошибка при сохранении: \(error.localizedDescription)"

@@ -10,18 +10,27 @@ struct MeetRecError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+struct RecordingResult {
+    let audioURL: URL
+    let videoURL: URL?
+}
+
 final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
     private let writer: AVAssetWriter
     private let systemInput: AVAssetWriterInput
     private let micInput: AVAssetWriterInput
+    private var videoInput: AVAssetWriterInput?
+    private let captureVideo: Bool
     private let sampleQueue = DispatchQueue(label: "meetrec.samples")
     private var sessionStarted = false
     private var stream: SCStream?
     let tempURL: URL
     let finalURL: URL
+    let videoFinalURL: URL?
     var onInterrupted: ((Error) -> Void)?
 
-    init(outputDir: URL, title: String? = nil) throws {
+    init(outputDir: URL, title: String? = nil, captureVideo: Bool = false) throws {
+        self.captureVideo = captureVideo
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH.mm"
@@ -34,6 +43,9 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
             counter += 1
         }
         finalURL = url
+        videoFinalURL = captureVideo
+            ? url.deletingPathExtension().appendingPathExtension("mp4")
+            : nil
         tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("meetrec-\(UUID().uuidString).mov")
 
@@ -66,11 +78,45 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         config.sampleRate = 48_000
         config.channelCount = 2
         config.captureMicrophone = true
-        // Видео не нужно, но поток обязан его отдавать — сводим к минимуму.
-        config.width = 2
-        config.height = 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-        config.showsCursor = false
+
+        if captureVideo {
+            // Пиксельный размер дисплея, ограниченный 2560 по ширине.
+            let scale = max(1, filter.pointPixelScale)
+            var pixelWidth = Int(Float(display.width) * scale)
+            var pixelHeight = Int(Float(display.height) * scale)
+            if pixelWidth > 2560 {
+                pixelHeight = pixelHeight * 2560 / pixelWidth
+                pixelWidth = 2560
+            }
+            pixelWidth &= ~1
+            pixelHeight &= ~1
+            config.width = pixelWidth
+            config.height = pixelHeight
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+            config.showsCursor = true
+            config.queueDepth = 8
+
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: pixelWidth,
+                AVVideoHeightKey: pixelHeight,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: 5_000_000,
+                    AVVideoExpectedSourceFrameRateKey: 30,
+                    AVVideoMaxKeyFrameIntervalKey: 120,
+                ],
+            ]
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            input.expectsMediaDataInRealTime = true
+            writer.add(input)
+            videoInput = input
+        } else {
+            // Видео не нужно, но поток обязан его отдавать — сводим к минимуму.
+            config.width = 2
+            config.height = 2
+            config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+            config.showsCursor = false
+        }
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
@@ -84,8 +130,8 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         self.stream = stream
     }
 
-    /// Останавливает захват, сводит дорожки и возвращает путь к готовому файлу.
-    func stop() async throws -> URL {
+    /// Останавливает захват, сводит дорожки и возвращает пути к готовым файлам.
+    func stop() async throws -> RecordingResult {
         if let stream {
             try? await stream.stopCapture()
         }
@@ -98,6 +144,7 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         systemInput.markAsFinished()
         micInput.markAsFinished()
+        videoInput?.markAsFinished()
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             writer.finishWriting { cont.resume() }
         }
@@ -106,13 +153,65 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         do {
             try await mixdown(from: tempURL, to: finalURL)
-            try? FileManager.default.removeItem(at: tempURL)
-            return finalURL
         } catch {
-            // Если сведение не удалось — сохраняем «сырой» файл с двумя дорожками.
+            // Если сведение не удалось — сохраняем «сырой» файл со всеми дорожками.
             let fallback = finalURL.deletingPathExtension().appendingPathExtension("mov")
             try FileManager.default.moveItem(at: tempURL, to: fallback)
-            return fallback
+            return RecordingResult(audioURL: fallback, videoURL: captureVideo ? fallback : nil)
+        }
+
+        var videoURL: URL?
+        if let videoFinalURL {
+            do {
+                videoURL = try await remuxVideo(source: tempURL, mixedAudio: finalURL, to: videoFinalURL)
+            } catch {
+                // Ремукс не удался — оставляем «сырой» .mov, видео не теряется.
+                let fallback = videoFinalURL.deletingPathExtension().appendingPathExtension("mov")
+                if (try? FileManager.default.copyItem(at: tempURL, to: fallback)) != nil {
+                    videoURL = fallback
+                }
+            }
+        }
+        try? FileManager.default.removeItem(at: tempURL)
+        return RecordingResult(audioURL: finalURL, videoURL: videoURL)
+    }
+
+    /// Собирает итоговое видео: дорожка экрана без перекодирования + сведённый звук.
+    /// Возвращает фактический путь (mp4, либо mov при несовместимости контейнера).
+    @discardableResult
+    private func remuxVideo(source: URL, mixedAudio: URL, to destination: URL) async throws -> URL {
+        let sourceAsset = AVURLAsset(url: source)
+        let audioAsset = AVURLAsset(url: mixedAudio)
+        guard let videoTrack = try await sourceAsset.loadTracks(withMediaType: .video).first,
+              let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first else {
+            throw MeetRecError("Не найдены дорожки для сборки видео.")
+        }
+        let composition = AVMutableComposition()
+        guard let compVideo = composition.addMutableTrack(
+                withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+              let compAudio = composition.addMutableTrack(
+                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw MeetRecError("Не удалось создать композицию видео.")
+        }
+        let videoRange = try await videoTrack.load(.timeRange)
+        try compVideo.insertTimeRange(videoRange, of: videoTrack, at: videoRange.start)
+        let audioRange = try await audioTrack.load(.timeRange)
+        try compAudio.insertTimeRange(audioRange, of: audioTrack, at: .zero)
+
+        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+            throw MeetRecError("Не удалось создать сессию сборки видео.")
+        }
+        do {
+            try await export.export(to: destination, as: .mp4)
+            return destination
+        } catch {
+            // Некоторые комбинации дорожек passthrough не кладёт в mp4 — пробуем mov.
+            guard let retry = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+                throw error
+            }
+            let movDestination = destination.deletingPathExtension().appendingPathExtension("mov")
+            try await retry.export(to: movDestination, as: .mov)
+            return movDestination
         }
     }
 
@@ -132,7 +231,10 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         switch type {
         case .audio: append(sampleBuffer, to: systemInput)
         case .microphone: append(sampleBuffer, to: micInput)
-        default: break // видеокадры игнорируем
+        case .screen:
+            guard let videoInput, sampleBuffer.imageBuffer != nil, isCompleteFrame(sampleBuffer) else { return }
+            append(sampleBuffer, to: videoInput)
+        default: break
         }
     }
 
@@ -144,6 +246,13 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
         }
+    }
+
+    private func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+            as? [[SCStreamFrameInfo: Any]],
+            let status = attachments.first?[.status] as? Int else { return true }
+        return status == SCFrameStatus.complete.rawValue
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
