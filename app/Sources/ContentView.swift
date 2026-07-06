@@ -395,9 +395,24 @@ struct ContentView: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Последние записи")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Последние записи")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if Hardware.supportsChat {
+                    Button {
+                        openWindow(id: "search")
+                        NSApp.activate(ignoringOtherApps: true)
+                    } label: {
+                        Label("Поиск по архиву", systemImage: "sparkle.magnifyingglass")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .pointingCursor()
+                    .help("Задать вопрос по всем встречам сразу")
+                }
+            }
             ForEach(state.recentRecordings, id: \.self) { url in
                 RecentRow(url: url)
             }

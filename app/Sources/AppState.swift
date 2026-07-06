@@ -413,13 +413,19 @@ final class AppState: ObservableObject {
         let diarize = self.diarize
         Task {
             do {
-                _ = try await Transcriber.shared.transcribe(audio: audio, header: header, diarize: diarize) { [weak self] status in
+                let transcript = try await Transcriber.shared.transcribe(audio: audio, header: header, diarize: diarize) { [weak self] status in
                     Task { @MainActor in self?.transcribeProgress[audio] = status }
+                }
+                transcribeProgress[audio] = nil
+                // Добавляем встречу в архивный индекс для поиска по всем записям.
+                if Hardware.supportsChat {
+                    try? await ArchiveIndexer.indexTranscript(at: transcript)
+                    await EmbeddingService.shared.shutdown()
                 }
             } catch {
                 errorMessage = "Транскрибация: \(error.localizedDescription)"
+                transcribeProgress[audio] = nil
             }
-            transcribeProgress[audio] = nil
         }
     }
 
