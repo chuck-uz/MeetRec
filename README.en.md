@@ -83,6 +83,7 @@ Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keycha
 | Action | How |
 |---|---|
 | Start / stop recording | Click the big button, or the menu bar icon → *Начать запись* |
+| Pause / resume recording | "Пауза" button below the record button (the paused gap is cut from the file) |
 | Watch recording time | Timer appears in the menu bar next to the icon |
 | Open a recording or transcript | Click it in the *Последние записи* list |
 | Transcribe an older recording | Click the ⊕-text icon in its row |

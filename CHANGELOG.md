@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.9] — 2026-07-06
+
+### Added
+- **Pause / resume recording**: a pause button next to the record button (and a
+  menu bar item) suspends recording; the paused interval is cut out of the final
+  file so the timeline stays seamless — no silence gap. Works for audio and
+  screen video (tracks stay in sync via sample-timestamp offsetting). The timer
+  freezes while paused and shows active recording time.
+
 ## [1.8] — 2026-07-06
 
 ### Added
