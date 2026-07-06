@@ -28,6 +28,12 @@ struct MeetRecApp: App {
         }
         .defaultLaunchBehavior(.suppressed)
 
+        Window("Поиск по встречам", id: "search") {
+            ArchiveSearchView()
+                .environmentObject(state)
+        }
+        .defaultLaunchBehavior(.suppressed)
+
         MenuBarExtra {
             MenuContent()
                 .environmentObject(state)
@@ -59,6 +65,12 @@ struct MenuContent: View {
         }
         Button("Папка записей") {
             state.openFolder()
+        }
+        if Hardware.supportsChat {
+            Button("Поиск по всем встречам…") {
+                openWindow(id: "search")
+                NSApp.activate(ignoringOtherApps: true)
+            }
         }
         Divider()
         Button("Завершить MeetRec") {

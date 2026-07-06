@@ -8,5 +8,10 @@
     "file": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
     "title": "Qwen 2.5 7B",
     "url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+  },
+  "embed": {
+    "file": "bge-m3-Q4_K_M.gguf",
+    "title": "bge-m3",
+    "url": "https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q4_K_M.gguf"
   }
 }

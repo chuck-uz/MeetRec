@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7] — 2026-07-06
+
+### Added
+- **Global archive search / local RAG** (Macs with 16+ GB unified memory): ask a
+  question across *all* past meetings and get an answer with cited sources.
+  Fully on-device — transcripts are chunked, embedded with **bge-m3** (llama.cpp,
+  Metal), and stored in a local SQLite index (FTS5 keyword + vector search fused
+  via Reciprocal Rank Fusion). The retrieved fragments are answered by the same
+  local Qwen 2.5 model. Nothing leaves the Mac.
+- New meetings are indexed automatically after transcription; existing transcripts
+  are indexed on first opening the search window.
+- Embedding model (~0.4 GB) downloads automatically on first use.
+
 ## [1.6] — 2026-07-06
 
 ### Added
