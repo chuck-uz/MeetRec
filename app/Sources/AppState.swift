@@ -97,6 +97,11 @@ final class AppState: ObservableObject {
     @Published var calendarStatus: String?
     @Published var upcomingEvents: [CalendarEvent] = []
 
+    // Выбор модели ИИ (v1.15)
+    @Published var llmModelID: String = LLMCatalog.current.id
+    @Published var modelDownloads: [String: String] = [:] // id → текст прогресса
+    @Published private(set) var modelsRevision = 0        // тик для обновления списка на диске
+
     private var calendarTimer: Timer?
     private var notifiedEventIDs: Set<String> = []
     private var meetingHeaders: [URL: String] = [:]
@@ -301,6 +306,48 @@ final class AppState: ObservableObject {
             }
             modelStatus = nil
         }
+    }
+
+    // MARK: - Модель ИИ (выбор под железо)
+
+    /// Пользователь выбрал модель для чата/итогов. Сервер перезагрузится с новой
+    /// моделью при следующем обращении.
+    func selectLLM(_ model: LLMModel) {
+        LLMCatalog.choose(model)
+        llmModelID = model.id
+        Task { await LLMRuntime.shared.shutdown() }
+    }
+
+    /// Скачать модель заранее (иначе она догрузится сама при первом чате).
+    func downloadModel(_ model: LLMModel) {
+        guard modelDownloads[model.id] == nil, !LLMCatalog.isDownloaded(model) else { return }
+        guard let url = URL(string: model.url) else {
+            errorMessage = "Некорректный адрес модели \(model.title)."
+            return
+        }
+        modelDownloads[model.id] = "0%"
+        Task {
+            do {
+                try await Downloader.fetch(from: url, to: LLMCatalog.fileURL(model), label: model.title) { [weak self] status in
+                    Task { @MainActor in self?.modelDownloads[model.id] = status }
+                }
+                modelDownloads[model.id] = nil
+                modelsRevision += 1
+            } catch {
+                modelDownloads[model.id] = nil
+                errorMessage = "Не удалось скачать \(model.title): \(error.localizedDescription)"
+                Log.error("Загрузка модели \(model.file): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Удалить скачанную модель, чтобы освободить диск.
+    func deleteModel(_ model: LLMModel) {
+        if LLMCatalog.current.id == model.id {
+            Task { await LLMRuntime.shared.shutdown() }
+        }
+        try? FileManager.default.removeItem(at: LLMCatalog.fileURL(model))
+        modelsRevision += 1
     }
 
     private func applyWindowLevel() {

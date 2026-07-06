@@ -175,7 +175,9 @@ final class Transcriber {
             throw MeetRecError("Манифест моделей недоступен.")
         }
         let manifest = try JSONDecoder().decode(ModelManifest.self, from: data)
-        if let llm = manifest.llm {
+        // Рекомендованную с сервера LLM применяем только если пользователь не
+        // выбрал модель сам (иначе перетёрли бы его выбор из настроек).
+        if let llm = manifest.llm, !UserDefaults.standard.bool(forKey: "llmModelUserChosen") {
             UserDefaults.standard.set(llm.file, forKey: "llmModelFile")
             UserDefaults.standard.set(llm.url, forKey: "llmModelURL")
             UserDefaults.standard.set(llm.title ?? llm.file, forKey: "llmModelTitle")

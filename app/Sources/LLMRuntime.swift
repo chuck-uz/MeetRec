@@ -6,6 +6,16 @@ enum Hardware {
     static let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
     /// Чат с ИИ доступен от 16 ГБ unified memory (модель ~4,7 ГБ + KV-кэш).
     static let supportsChat = ramGB >= 16
+
+    /// Название процессора, напр. «Apple M2 Pro» (для экрана выбора модели).
+    static let chipName: String = {
+        var size = 0
+        sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0)
+        guard size > 0 else { return "Apple silicon" }
+        var buffer = [CChar](repeating: 0, count: size)
+        sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0)
+        return String(cString: buffer)
+    }()
 }
 
 struct LLMSpec {
@@ -160,7 +170,8 @@ actor LLMRuntime {
         }
         let modelPath = Self.modelURL
         if !FileManager.default.fileExists(atPath: modelPath.path) {
-            onStatus("скачивание модели \(spec.title) (~4,7 ГБ)…")
+            let sizeHint = LLMCatalog.model(file: spec.file).map { String(format: "~%.1f ГБ", $0.fileGB) } ?? "несколько ГБ"
+            onStatus("скачивание модели \(spec.title) (\(sizeHint))…")
             guard let url = URL(string: spec.url) else {
                 throw MeetRecError("Некорректный адрес модели.")
             }
