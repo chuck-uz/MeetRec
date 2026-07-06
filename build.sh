@@ -32,6 +32,7 @@ cp .build/release/MeetRec "$APP/Contents/MacOS/MeetRec"
 cp app/Info.plist "$APP/Contents/Info.plist"
 cp app/bin/whisper-cli "$APP/Contents/MacOS/whisper-cli"
 cp app/bin/llama-server "$APP/Contents/MacOS/llama-server"
+cp app/bin/ggml-silero-v5.1.2.bin "$APP/Contents/Resources/ggml-silero-v5.1.2.bin"
 
 echo "→ Иконка…"
 if [ ! -f app/AppIcon.icns ]; then

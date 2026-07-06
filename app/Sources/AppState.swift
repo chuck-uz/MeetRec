@@ -48,6 +48,16 @@ final class AppState: ObservableObject {
     @Published var autoTranscribe: Bool {
         didSet { UserDefaults.standard.set(autoTranscribe, forKey: "autoTranscribe") }
     }
+    /// Язык распознавания: «auto» или ISO-код (ru/en…).
+    @Published var transcribeLanguage: String {
+        didSet { UserDefaults.standard.set(transcribeLanguage, forKey: "whisperLanguage") }
+    }
+    /// Поддерживаемые в UI языки (код → название). auto первым.
+    static let languageOptions: [(code: String, title: String)] = [
+        ("auto", "Авто"), ("ru", "Русский"), ("en", "English"),
+        ("uk", "Українська"), ("kk", "Қазақша"), ("uz", "Oʻzbekcha"),
+        ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
+    ]
     @Published var captureVideo: Bool {
         didSet { UserDefaults.standard.set(captureVideo, forKey: "captureVideo") }
     }
@@ -109,6 +119,7 @@ final class AppState: ObservableObject {
         }
         floatOnTop = UserDefaults.standard.bool(forKey: "floatOnTop")
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
+        transcribeLanguage = UserDefaults.standard.string(forKey: "whisperLanguage") ?? Self.defaultLanguage()
         captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
         diarize = UserDefaults.standard.bool(forKey: "diarize")
         autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
@@ -293,6 +304,12 @@ final class AppState: ObservableObject {
 
     private func applyWindowLevel() {
         mainWindow?.level = floatOnTop ? .floating : .normal
+    }
+
+    /// По умолчанию — язык системы, если он из известного набора, иначе «auto».
+    static func defaultLanguage() -> String {
+        let code = Locale.current.language.languageCode?.identifier ?? "auto"
+        return languageOptions.contains { $0.code == code } ? code : "auto"
     }
 
     static func defaultOutputDir() -> URL {

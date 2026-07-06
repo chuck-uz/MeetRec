@@ -50,6 +50,21 @@ final class Transcriber {
         return nil
     }
 
+    /// Модель VAD (детектор речи) — вшита в приложение, убирает галлюцинации на паузах.
+    static func vadModel() -> URL? {
+        if let url = Bundle.main.url(forResource: "ggml-silero-v5.1.2", withExtension: "bin"),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        let fallback = modelsDir.appendingPathComponent("ggml-silero-v5.1.2.bin")
+        return FileManager.default.fileExists(atPath: fallback.path) ? fallback : nil
+    }
+
+    /// Язык распознавания: «auto» или код (ru/en…). Хранится в настройках.
+    static var language: String {
+        UserDefaults.standard.string(forKey: "whisperLanguage") ?? "auto"
+    }
+
     private let processLock = NSLock()
     private var running: [Process] = []
 
@@ -82,9 +97,16 @@ final class Transcriber {
         progress("распознавание…")
         let status = try await run(
             cli,
-            ["-m", Self.modelURL.path, "-f", wav.path,
-             "-l", "auto", "-t", "8", "-fa",
-             "-oj", "-of", base.path, "--print-progress"]
+            {
+                var args = ["-m", Self.modelURL.path, "-f", wav.path,
+                            "-l", Self.language, "-t", "8", "-fa",
+                            "-oj", "-of", base.path, "--print-progress"]
+                // VAD режет тишину и убирает повторы-галлюцинации на паузах.
+                if let vad = Self.vadModel() {
+                    args += ["--vad", "--vad-model", vad.path]
+                }
+                return args
+            }()
         ) { chunk in
             if let match = chunk.range(of: #"progress\s*=\s*(\d+)%"#, options: .regularExpression) {
                 let percent = chunk[match].filter(\.isNumber)
