@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Политика конфиденциальности — MeetRec</title>
+<meta name="description" content="Политика конфиденциальности MeetRec: приложение работает полностью локально, не собирает и не передаёт персональные данные.">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--primary:#0891B2;--accent:#059669;--ink:#0F2E3B;--muted:#557;--fg:#164E63;--bg:#F2FBFD;--card:#fff;--border:#D6EEF3}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',-apple-system,sans-serif;color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased}
+  a{color:var(--primary);cursor:pointer}
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+  nav{border-bottom:1px solid var(--border);background:var(--card)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--ink);text-decoration:none}
+  .brand img{width:32px;height:32px;border-radius:8px}
+  .nav-in a.back{font-weight:500;font-size:15px;color:var(--muted);text-decoration:none}
+  .nav-in a.back:hover{color:var(--primary)}
+  main{padding:56px 0 72px}
+  h1{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+  .upd{color:var(--muted);font-size:14px;margin-bottom:36px}
+  h2{font-size:20px;font-weight:700;color:var(--fg);margin:34px 0 10px}
+  p,li{color:#2b4a55;font-size:16px}
+  ul{margin:10px 0 10px 22px}
+  li{margin-bottom:8px}
+  .box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;margin:24px 0;border-left:4px solid var(--accent)}
+  .box strong{color:var(--accent)}
+  footer{border-top:1px solid var(--border);background:var(--card);padding:28px 0}
+  .foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:14px;color:var(--muted)}
+  .foot a{text-decoration:none}
+</style>
+</head>
+<body>
+<nav><div class="wrap nav-in">
+  <a class="brand" href="index.html"><img src="icon.png" alt="MeetRec"> MeetRec</a>
+  <a class="back" href="index.html">← На главную</a>
+</div></nav>
+
+<main class="wrap">
+  <h1>Политика конфиденциальности</h1>
+  <div class="upd">Приложение MeetRec · обновлено 6 июля 2026</div>
+
+  <div class="box">
+    <strong>Коротко.</strong> MeetRec работает полностью на вашем устройстве. Приложение не собирает,
+    не хранит на серверах и не передаёт третьим лицам ваши записи, транскрипты или любые персональные
+    данные. У MeetRec нет учётных записей, аналитики и рекламы.
+  </div>
+
+  <h2>Какие данные обрабатываются</h2>
+  <p>MeetRec создаёт и хранит <strong>только на вашем Mac</strong>: аудио- и видеозаписи встреч,
+  текстовые расшифровки, итоги встреч и локальный индекс для поиска. Эти файлы находятся в выбранной
+  вами папке (по умолчанию «Документы») и никуда не отправляются. Вы можете удалить их в любой момент.</p>
+
+  <h2>Выход в интернет</h2>
+  <p>Приложение обращается к сети только в двух случаях, и оба не связаны с передачей ваших данных:</p>
+  <ul>
+    <li><strong>Скачивание моделей.</strong> При первом использовании MeetRec загружает открытые
+      модели распознавания речи и ИИ (с Hugging Face). Это одноразовая загрузка файлов моделей —
+      никакие ваши записи при этом не отправляются.</li>
+    <li><strong>Проверка обновлений моделей.</strong> Приложение периодически сверяется с публичным
+      файлом-манифестом в репозитории проекта на GitHub, чтобы предложить более новую модель.</li>
+  </ul>
+  <p>После загрузки моделей запись, расшифровка, разбор по спикерам, чат с ИИ и поиск по архиву
+  работают <strong>полностью офлайн</strong>.</p>
+
+  <h2>Google Календарь (необязательно)</h2>
+  <p>Если вы сами подключите Google Календарь, MeetRec запрашивает доступ <strong>только на чтение</strong>
+  (<code>calendar.readonly</code>), чтобы называть записи по встрече и напоминать о начале. Токены доступа
+  хранятся в защищённой связке ключей macOS (Keychain) на вашем компьютере и используются исключительно
+  для обращения к API Google Календаря напрямую с вашего устройства. MeetRec не пересылает данные вашего
+  календаря на какие-либо сторонние серверы. Отключить доступ можно в один клик в самом приложении.
+  Использование данных Google соответствует
+  <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
+  включая требования Limited Use.</p>
+
+  <h2>Разрешения macOS</h2>
+  <p>Для работы приложение просит системные разрешения на запись экрана и системного звука, микрофон
+  и (по желанию) уведомления. Эти разрешения используются только для записи встреч по вашей команде.</p>
+
+  <h2>Дети</h2>
+  <p>Продукт не предназначен для детей младше 13 лет и не собирает их данные.</p>
+
+  <h2>Изменения</h2>
+  <p>Актуальная версия политики всегда доступна на этой странице. Существенные изменения будут отражены
+  в дате обновления выше.</p>
+
+  <h2>Контакты</h2>
+  <p>Вопросы по приложению и приватности — через
+  <a href="https://github.com/chuck-uz/MeetRec/issues" target="_blank" rel="noopener">issues репозитория на GitHub</a>.</p>
+</main>
+
+<footer><div class="wrap foot">
+  <span>© 2026 MeetRec · Открытый код, лицензия MIT</span>
+  <span><a href="index.html">Главная</a> · <a href="https://github.com/chuck-uz/MeetRec" target="_blank" rel="noopener">GitHub</a></span>
+</div></footer>
+</body>
+</html>

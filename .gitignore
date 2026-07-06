@@ -7,3 +7,4 @@ dist/
 v1.0/
 /meetrec
 .build/
+.claude/launch.json
