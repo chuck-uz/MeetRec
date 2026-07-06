@@ -25,6 +25,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 
 - **One-click recording** — a big round button in a compact window (turns red and pulses while recording), or start straight from the menu bar; a live timer sits next to the clock.
 - **System audio + microphone** captured simultaneously via ScreenCaptureKit and mixed into one stereo AAC file (48 kHz).
+- **Pause & resume recording** — a pause button in the window and the menu bar; the paused interval is cut out of the final file, so the timeline stays seamless — no silence gap. Works for both audio and screen video.
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
 - **Speaker diarization (optional)** — transcripts as a dialog, «Спикер 1 / Спикер 2…» ([FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML, fully on-device; ~30 MB models download automatically).
@@ -32,7 +33,9 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Model picker tuned to your hardware** (gear icon in the header) — Qwen 2.5 **3B / 7B / 14B** with a hint of what suits your Mac by unified memory: "Рекомендуется", "Доступно", "Впритык" or "Не хватит памяти". Pre-download a model (with progress) or delete it to reclaim disk.
 - **Global archive search (local RAG)** (Macs with 16+ GB memory) — ask one question across *all* meetings and get an answer with cited sources. Transcripts are chunked, embedded with [bge-m3](https://huggingface.co/BAAI/bge-m3) and stored in a local SQLite index (FTS5 keyword + vector search, fused via RRF); the same local Qwen writes the answer. Nothing leaves your Mac.
 - **Automatic meeting summary (optional)** (Macs with 16+ GB memory) — after transcription the local model writes a structured summary (brief / decisions / action items) into a companion `… — итоги.md` next to the recording. Zero clicks from recording to action items.
+- **Unified "Мои встречи" window** — all recordings on the left; on the right, an AI chat for the selected meeting plus archive search. Open audio, video, transcript and summary in one click.
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
+- **Check for updates** — a daily check against GitHub releases surfaces an "обновить" badge; the current version is shown right in the window header.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
 - **Screen video recording (optional)** — a toggle captures the whole screen at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
