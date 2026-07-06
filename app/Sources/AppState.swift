@@ -125,6 +125,7 @@ final class AppState: ObservableObject {
         autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
+        Self.killStaleModelServers()
         Log.trimIfNeeded()
         Log.info("MeetRec \(UpdateChecker.currentVersion) запущен · RAM \(Hardware.ramGB) ГБ")
         checkModelUpdate()
@@ -655,8 +656,18 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Убивает осиротевшие серверы моделей от прошлой (упавшей) сессии —
+    /// иначе они держат по ~5 ГБ и приводят к нехватке памяти и таймаутам.
+    static func killStaleModelServers() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        process.arguments = ["-f", "MeetRec.app/Contents/MacOS/llama-server"]
+        try? process.run()
+    }
+
     func quit() {
         Transcriber.shared.cancelAll()
+        Task { await LLMRuntime.shared.shutdown(); await EmbeddingService.shared.shutdown() }
         if isRecording, let engine {
             isRecording = false
             timer?.invalidate()
