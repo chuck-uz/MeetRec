@@ -45,6 +45,10 @@ final class AppState: ObservableObject {
     @Published var diarize: Bool {
         didSet { UserDefaults.standard.set(diarize, forKey: "diarize") }
     }
+    @Published var autoSummary: Bool {
+        didSet { UserDefaults.standard.set(autoSummary, forKey: "autoSummary") }
+    }
+    @Published var summarizing: Set<URL> = []
     @Published var launchAtLogin: Bool {
         didSet {
             guard !suppressLoginItemUpdate, launchAtLogin != oldValue else { return }
@@ -94,6 +98,7 @@ final class AppState: ObservableObject {
         autoTranscribe = UserDefaults.standard.object(forKey: "autoTranscribe") as? Bool ?? true
         captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
         diarize = UserDefaults.standard.bool(forKey: "diarize")
+        autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
         checkModelUpdate()
@@ -421,6 +426,9 @@ final class AppState: ObservableObject {
                 if Hardware.supportsChat {
                     try? await ArchiveIndexer.indexTranscript(at: transcript)
                     await EmbeddingService.shared.shutdown()
+                    if autoSummary {
+                        await runSummary(transcript: transcript, audio: audio)
+                    }
                 }
             } catch {
                 errorMessage = "Транскрибация: \(error.localizedDescription)"
@@ -431,6 +439,34 @@ final class AppState: ObservableObject {
 
     func openTranscript(_ audio: URL) {
         NSWorkspace.shared.open(Transcriber.transcriptURL(for: audio))
+    }
+
+    // MARK: - Итоги встречи (авто-саммари)
+
+    func hasSummary(_ audio: URL) -> Bool {
+        FileManager.default.fileExists(atPath: Summarizer.summaryURL(forAudio: audio).path)
+    }
+
+    func openSummary(_ audio: URL) {
+        NSWorkspace.shared.open(Summarizer.summaryURL(forAudio: audio))
+    }
+
+    /// Ручной запуск подготовки итогов для конкретной записи.
+    func summarize(_ audio: URL) {
+        let transcript = Transcriber.transcriptURL(for: audio)
+        guard hasTranscript(audio), !summarizing.contains(audio) else { return }
+        Task { await runSummary(transcript: transcript, audio: audio) }
+    }
+
+    private func runSummary(transcript: URL, audio: URL) async {
+        guard !summarizing.contains(audio) else { return }
+        summarizing.insert(audio)
+        defer { summarizing.remove(audio) }
+        do {
+            _ = try await Summarizer.summarize(transcript: transcript)
+        } catch {
+            errorMessage = "Итоги: \(error.localizedDescription)"
+        }
     }
 
     private func sanitizeFileName(_ name: String) -> String {

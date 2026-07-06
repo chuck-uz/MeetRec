@@ -11,14 +11,14 @@ APP=build/MeetRec.app
 
 # Заменять .app при живом процессе нельзя: macOS заметит подмену бинарника
 # и может сбросить выданные права. Режим install закрывает приложение сам.
-if [ "$MODE" = "install" ] && pgrep -fq '/Applications/MeetRec.app'; then
+if [ "$MODE" = "install" ] && pgrep -fq '/Applications/MeetRec.app/Contents/MacOS/MeetRec'; then
   echo "→ Закрываю запущенный MeetRec…"
   osascript -e 'tell application "MeetRec" to quit' >/dev/null 2>&1 || true
   for _ in {1..20}; do
-    pgrep -fq '/Applications/MeetRec.app' || break
+    pgrep -fq '/Applications/MeetRec.app/Contents/MacOS/MeetRec' || break
     sleep 0.5
   done
-  if pgrep -fq '/Applications/MeetRec.app'; then
+  if pgrep -fq '/Applications/MeetRec.app/Contents/MacOS/MeetRec'; then
     echo "❌ MeetRec не закрылся (возможно, идёт запись). Установка отменена."
     exit 1
   fi

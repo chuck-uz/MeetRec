@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8] — 2026-07-06
+
+### Added
+- **Automatic meeting summary** (optional toggle, Macs with 16+ GB): after
+  transcription the local LLM writes a structured summary — «Кратко / Решения /
+  Задачи (action items)» — saved as a companion `… — итоги.md` next to the
+  recording. Can also be generated on demand per recording. Summaries are kept
+  out of the archive search index. Fully on-device.
+
 ## [1.7] — 2026-07-06
 
 ### Added

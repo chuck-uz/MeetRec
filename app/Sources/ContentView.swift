@@ -30,6 +30,9 @@ struct ContentView: View {
             videoCard
             transcribeCard
             diarizeCard
+            if Hardware.supportsChat {
+                summaryCard
+            }
             calendarCard
             if !state.recentRecordings.isEmpty {
                 recentSection
@@ -332,6 +335,33 @@ struct ContentView: View {
         )
     }
 
+    private var summaryCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "list.bullet.rectangle")
+                .foregroundStyle(state.autoSummary ? Design.accent : Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Авто-итоги встречи")
+                    .font(.callout.weight(.medium))
+                Text(state.autoSummary ? "кратко · решения · задачи — файл рядом с записью" : "итоги можно собрать вручную у записи")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Toggle("", isOn: $state.autoSummary)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.accent)
+                .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
     private var calendarCard: some View {
         HStack(spacing: 8) {
             Image(systemName: "calendar")
@@ -522,6 +552,33 @@ private struct RecentRow: View {
                 .buttonStyle(.borderless)
                 .pointingCursor()
                 .help("Чат с ИИ по этой встрече")
+            }
+            if Hardware.supportsChat {
+                if state.summarizing.contains(url) {
+                    ProgressView().controlSize(.mini)
+                } else if state.hasSummary(url) {
+                    Button {
+                        state.openSummary(url)
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Design.accent)
+                    }
+                    .buttonStyle(.borderless)
+                    .pointingCursor()
+                    .help("Открыть итоги встречи")
+                } else {
+                    Button {
+                        state.summarize(url)
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    .pointingCursor()
+                    .help("Собрать итоги встречи")
+                }
             }
             Button {
                 state.openTranscript(url)

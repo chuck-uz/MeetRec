@@ -112,7 +112,7 @@ enum ArchiveIndexer {
     ) async {
         let fm = FileManager.default
         let transcripts = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?
-            .filter { $0.pathExtension.lowercased() == "md" } ?? []
+            .filter { $0.pathExtension.lowercased() == "md" && !Summarizer.isSummary($0) } ?? []
         let ids = Set(transcripts.map { $0.deletingPathExtension().lastPathComponent })
         await ArchiveStore.shared.removeMissing(existingIDs: ids)
 
