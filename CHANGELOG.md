@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13] — 2026-07-06
+
+### Changed
+- **Much better transcription quality**: voice-activity detection (VAD, Silero,
+  bundled) is now always on — it cuts silence and eliminates the repetition
+  hallucinations Whisper produced on pauses (e.g. "ну отлично" repeated). A new
+  **recognition language** picker (Auto / Russian / English / …, defaults to the
+  system language) forces the right language instead of shaky auto-detect.
+  On real meetings this fixed garbled jargon and names (Kubernetes, Ubuntu 24.04,
+  Cloudflare, FortiGate…).
+
 ## [1.12] — 2026-07-06
 
 ### Added

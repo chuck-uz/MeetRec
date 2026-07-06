@@ -353,12 +353,24 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Автотранскрибация")
                     .font(.callout.weight(.medium))
-                Text(state.modelStatus ?? "\(Transcriber.modelTitle) · текст рядом с записью")
+                Text(state.modelStatus ?? "\(Transcriber.modelTitle) · язык распознавания:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
+            Menu {
+                ForEach(AppState.languageOptions, id: \.code) { option in
+                    Button(option.title) { state.transcribeLanguage = option.code }
+                }
+            } label: {
+                Text(languageTitle(state.transcribeLanguage))
+                    .font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .pointingCursor()
+            .help("Язык распознавания речи")
             Toggle("", isOn: $state.autoTranscribe)
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -371,6 +383,10 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: Design.corner)
                 .fill(Color.primary.opacity(0.05))
         )
+    }
+
+    private func languageTitle(_ code: String) -> String {
+        AppState.languageOptions.first { $0.code == code }?.title ?? "Авто"
     }
 
     private var diarizeCard: some View {
