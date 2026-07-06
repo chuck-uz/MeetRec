@@ -36,6 +36,11 @@ struct ChatTurn: Sendable {
     let text: String
 }
 
+/// Накопитель токенов; обращения сериализованы внутри актора LLMRuntime.
+private final class TokenBuffer: @unchecked Sendable {
+    var text = ""
+}
+
 actor LLMRuntime {
     static let shared = LLMRuntime()
 
@@ -110,6 +115,16 @@ actor LLMRuntime {
         }
         lastUse = Date()
         scheduleIdleShutdown()
+    }
+
+    /// Полный ответ одним куском (для фоновых задач вроде авто-саммари).
+    func complete(
+        turns: [ChatTurn],
+        onStatus: @escaping @Sendable (String) -> Void
+    ) async throws -> String {
+        let buffer = TokenBuffer()
+        try await generate(turns: turns, onToken: { buffer.text += $0 }, onStatus: onStatus)
+        return buffer.text
     }
 
     /// Останавливает llama-server — освобождает ~6 ГБ памяти.
