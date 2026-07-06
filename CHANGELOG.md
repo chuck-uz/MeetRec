@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.10] — 2026-07-06
+
+### Added
+- **"Мои встречи" — unified window**: a wide split-view window with all recordings
+  in the sidebar and, on the right, an AI chat for the selected recording plus
+  quick actions (open audio/video, transcript, summary). The global archive
+  search now lives in the same window (top of the sidebar). Replaces the separate
+  chat and search windows.
+
 ## [1.9] — 2026-07-06
 
 ### Added

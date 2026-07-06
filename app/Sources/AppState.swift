@@ -17,6 +17,12 @@ extension Notification.Name {
     static let meetrecStartRecording = Notification.Name("ru.dinya.meetrec.startRecording")
 }
 
+/// Что показать в окне «Мои встречи»: поиск по архиву или чат по конкретной записи.
+enum MeetingsTarget: Hashable {
+    case search
+    case recording(URL)  // аудиофайл записи
+}
+
 @MainActor
 final class AppState: ObservableObject {
     static private(set) weak var shared: AppState?
@@ -70,6 +76,7 @@ final class AppState: ObservableObject {
     private var suppressLoginItemUpdate = false
     @Published var recordingSizeText: String?
     @Published var chatTranscript: URL?
+    @Published var meetingsTarget: MeetingsTarget?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
     @Published var calendarConnected = false
@@ -248,7 +255,8 @@ final class AppState: ObservableObject {
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
     }
 
-    var recentRecordings: [URL] {
+    /// Все записи в папке (новые сверху), без видео-дублей аудиофайлов.
+    var allRecordings: [URL] {
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
             at: outputDir,
@@ -264,8 +272,10 @@ final class AppState: ObservableObject {
                 return !fm.fileExists(atPath: sibling.path)
             }
             .sorted { modDate($0) > modDate($1) }
-            .prefix(4)
-            .map { $0 }
+    }
+
+    var recentRecordings: [URL] {
+        Array(allRecordings.prefix(4))
     }
 
     /// Видеофайл, записанный вместе с этой аудиозаписью.
