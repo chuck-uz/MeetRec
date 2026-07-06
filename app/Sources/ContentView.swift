@@ -65,6 +65,24 @@ struct ContentView: View {
                 .foregroundStyle(Design.primary)
             Text("MeetRec")
                 .font(.headline)
+            Text("v\(UpdateChecker.currentVersion)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            if state.availableUpdate != nil {
+                Button {
+                    state.openLatestRelease()
+                } label: {
+                    Text("обновить")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Design.accent.opacity(0.15)))
+                        .foregroundStyle(Design.accent)
+                }
+                .buttonStyle(.plain)
+                .pointingCursor()
+                .help("Доступна версия \(state.availableUpdate?.version ?? "") — открыть страницу релиза")
+            }
             Spacer()
             Button {
                 state.floatOnTop.toggle()
