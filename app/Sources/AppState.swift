@@ -31,7 +31,9 @@ final class AppState: ObservableObject {
     @Published var isSaving = false
     @Published var elapsed: TimeInterval = 0
     @Published var lastSaved: URL?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { if let e = errorMessage { Log.error(e) } }
+    }
     @Published var permissionIssue: PermissionIssue?
     @Published var outputDir: URL {
         didSet { UserDefaults.standard.set(outputDir.path, forKey: "outputDir") }
@@ -112,6 +114,8 @@ final class AppState: ObservableObject {
         autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
+        Log.trimIfNeeded()
+        Log.info("MeetRec \(UpdateChecker.currentVersion) запущен · RAM \(Hardware.ramGB) ГБ")
         checkModelUpdate()
         checkForUpdates(manual: false)
 
@@ -431,6 +435,7 @@ final class AppState: ObservableObject {
                     Task { @MainActor in self?.handleInterruption(error) }
                 }
                 try await engine.start()
+                Log.info("Запись начата · видео=\(captureVideo)")
                 self.engine = engine
                 isRecording = true
                 isPaused = false
@@ -510,9 +515,11 @@ final class AppState: ObservableObject {
         let diarize = self.diarize
         Task {
             do {
+                Log.info("Транскрибация начата: \(audio.lastPathComponent) · диаризация=\(diarize)")
                 let transcript = try await Transcriber.shared.transcribe(audio: audio, header: header, diarize: diarize) { [weak self] status in
                     Task { @MainActor in self?.transcribeProgress[audio] = status }
                 }
+                Log.info("Транскрибация готова: \(transcript.lastPathComponent)")
                 transcribeProgress[audio] = nil
                 // Добавляем встречу в архивный индекс для поиска по всем записям.
                 if Hardware.supportsChat {
@@ -555,10 +562,16 @@ final class AppState: ObservableObject {
         summarizing.insert(audio)
         defer { summarizing.remove(audio) }
         do {
+            Log.info("Итоги: генерация для \(transcript.lastPathComponent)")
             _ = try await Summarizer.summarize(transcript: transcript)
+            Log.info("Итоги: готово для \(transcript.lastPathComponent)")
         } catch {
             errorMessage = "Итоги: \(error.localizedDescription)"
         }
+    }
+
+    func openLogs() {
+        Log.reveal()
     }
 
     private func sanitizeFileName(_ name: String) -> String {

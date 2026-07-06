@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.12] — 2026-07-06
+
+### Added
+- **Error logs**: MeetRec now writes a log to `~/Library/Logs/MeetRec/MeetRec.log`
+  (recording, transcription, summary, model-load events and all errors). New
+  "Показать логи…" menu item and a "Показать логи" button on error cards reveal
+  the file in Finder so it can be shared for diagnosis.
+
+### Changed
+- Error messages are shown in full (multi-line, selectable) instead of being
+  truncated.
+- The local model load now waits longer (up to 180 s) and captures the model
+  server's stderr, so failures report the real cause (e.g. out of memory).
+
 ## [1.11] — 2026-07-06
 
 ### Added
