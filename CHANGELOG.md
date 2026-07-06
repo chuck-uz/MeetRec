@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.14] — 2026-07-06
+
+### Changed
+- **Much richer summaries**: the auto-summary and chat "Саммари" prompts were
+  rewritten to produce a detailed, structured result — context, key discussion
+  and participants' positions, decisions, action items with owners, and open
+  questions — instead of a few shallow bullets.
+
+### Fixed
+- **Memory / model-load timeouts**: stale `llama-server` processes left over from
+  a crashed session (each holding ~5 GB) are now killed on launch, and the model
+  servers are shut down on quit. This was the cause of the summary "load timeout"
+  errors.
+
 ## [1.13] — 2026-07-06
 
 ### Changed
