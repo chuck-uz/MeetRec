@@ -107,6 +107,10 @@ final class ChatViewModel: ObservableObject {
 struct ChatView: View {
     @EnvironmentObject var state: AppState
     @StateObject private var model = ChatViewModel()
+    /// Если задан — чат по этому транскрипту; иначе берём state.chatTranscript.
+    var transcript: URL? = nil
+    /// В окне «Мои встречи» встроено — без фиксированного размера.
+    var embedded: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -116,13 +120,15 @@ struct ChatView: View {
             Divider()
             composer
         }
-        .frame(minWidth: 440, idealWidth: 520, minHeight: 420, idealHeight: 620)
+        .frame(minWidth: embedded ? nil : 440, idealWidth: embedded ? nil : 520,
+               minHeight: embedded ? nil : 420, idealHeight: embedded ? nil : 620)
         .onAppear { openCurrent() }
-        .onChange(of: state.chatTranscript) { _, _ in openCurrent() }
+        .onChange(of: transcript) { _, _ in openCurrent() }
+        .onChange(of: state.chatTranscript) { _, _ in if transcript == nil { openCurrent() } }
     }
 
     private func openCurrent() {
-        if let url = state.chatTranscript {
+        if let url = transcript ?? state.chatTranscript {
             model.open(transcript: url)
         }
     }

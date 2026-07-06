@@ -22,14 +22,8 @@ struct MeetRecApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
-        Window("Чат по встрече", id: "chat") {
-            ChatView()
-                .environmentObject(state)
-        }
-        .defaultLaunchBehavior(.suppressed)
-
-        Window("Поиск по встречам", id: "search") {
-            ArchiveSearchView()
+        Window("Мои встречи", id: "meetings") {
+            MeetingsView()
                 .environmentObject(state)
         }
         .defaultLaunchBehavior(.suppressed)
@@ -72,11 +66,9 @@ struct MenuContent: View {
         Button("Папка записей") {
             state.openFolder()
         }
-        if Hardware.supportsChat {
-            Button("Поиск по всем встречам…") {
-                openWindow(id: "search")
-                NSApp.activate(ignoringOtherApps: true)
-            }
+        Button("Мои встречи…") {
+            openWindow(id: "meetings")
+            NSApp.activate(ignoringOtherApps: true)
         }
         Divider()
         Button("Завершить MeetRec") {

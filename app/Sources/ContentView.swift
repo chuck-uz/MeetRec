@@ -456,18 +456,17 @@ struct ContentView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                if Hardware.supportsChat {
-                    Button {
-                        openWindow(id: "search")
-                        NSApp.activate(ignoringOtherApps: true)
-                    } label: {
-                        Label("Поиск по архиву", systemImage: "sparkle.magnifyingglass")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .pointingCursor()
-                    .help("Задать вопрос по всем встречам сразу")
+                Button {
+                    state.meetingsTarget = Hardware.supportsChat ? .search : nil
+                    openWindow(id: "meetings")
+                    NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    Label("Мои встречи", systemImage: "rectangle.stack")
+                        .font(.caption)
                 }
+                .buttonStyle(.borderless)
+                .pointingCursor()
+                .help("Все записи, чат с ИИ и поиск по архиву в одном окне")
             }
             ForEach(state.recentRecordings, id: \.self) { url in
                 RecentRow(url: url)
@@ -567,8 +566,8 @@ private struct RecentRow: View {
         } else if state.hasTranscript(url) {
             if Hardware.supportsChat {
                 Button {
-                    state.chatTranscript = Transcriber.transcriptURL(for: url)
-                    openWindow(id: "chat")
+                    state.meetingsTarget = .recording(url)
+                    openWindow(id: "meetings")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     Image(systemName: "bubble.left.and.text.bubble.right")
