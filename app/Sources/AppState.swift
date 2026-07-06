@@ -21,6 +21,7 @@ extension Notification.Name {
 final class AppState: ObservableObject {
     static private(set) weak var shared: AppState?
     @Published var isRecording = false
+    @Published var isPaused = false
     @Published var isSaving = false
     @Published var elapsed: TimeInterval = 0
     @Published var lastSaved: URL?
@@ -87,6 +88,8 @@ final class AppState: ObservableObject {
     private var engine: RecorderEngine?
     private var timer: Timer?
     private var startedAt: Date?
+    private var pausedAt: Date?
+    private var pausedAccumulated: TimeInterval = 0
 
     init() {
         if let saved = UserDefaults.standard.string(forKey: "outputDir"), !saved.isEmpty {
@@ -361,12 +364,15 @@ final class AppState: ObservableObject {
                 try await engine.start()
                 self.engine = engine
                 isRecording = true
+                isPaused = false
                 startedAt = Date()
+                pausedAt = nil
+                pausedAccumulated = 0
                 elapsed = 0
                 timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                     Task { @MainActor in
-                        guard let self, let startedAt = self.startedAt else { return }
-                        self.elapsed = Date().timeIntervalSince(startedAt)
+                        guard let self, let startedAt = self.startedAt, !self.isPaused else { return }
+                        self.elapsed = Date().timeIntervalSince(startedAt) - self.pausedAccumulated
                         if self.captureVideo, let temp = self.engine?.tempURL,
                            let bytes = (try? FileManager.default.attributesOfItem(atPath: temp.path))?[.size] as? Int64 {
                             self.recordingSizeText = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
@@ -379,9 +385,26 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Пауза / продолжение записи. Простой вырезается из итогового файла.
+    func pauseResume() {
+        guard let engine, isRecording else { return }
+        if isPaused {
+            // Возобновляем: учитываем прошедшее на паузе время для таймера.
+            if let pausedAt { pausedAccumulated += Date().timeIntervalSince(pausedAt) }
+            pausedAt = nil
+            isPaused = false
+            engine.resume()
+        } else {
+            pausedAt = Date()
+            isPaused = true
+            engine.pause()
+        }
+    }
+
     func stopAndSave() {
         guard let engine, isRecording else { return }
         isRecording = false
+        isPaused = false
         isSaving = true
         timer?.invalidate()
         timer = nil

@@ -39,7 +39,8 @@ struct MeetRecApp: App {
                 .environmentObject(state)
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: state.isRecording ? "record.circle.fill" : "waveform.circle")
+                Image(systemName: state.isPaused ? "pause.circle.fill"
+                    : (state.isRecording ? "record.circle.fill" : "waveform.circle"))
                 if state.isRecording {
                     Text(state.elapsedText)
                         .monospacedDigit()
@@ -59,6 +60,11 @@ struct MenuContent: View {
             state.toggle()
         }
         .disabled(state.isSaving)
+        if state.isRecording && !state.isSaving {
+            Button(state.isPaused ? "Продолжить запись" : "Пауза") {
+                state.pauseResume()
+            }
+        }
         Button("Открыть MeetRec") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)

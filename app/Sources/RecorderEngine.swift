@@ -24,6 +24,11 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
     private let sampleQueue = DispatchQueue(label: "meetrec.samples")
     private var sessionStarted = false
     private var stream: SCStream?
+    // Пауза: сдвигаем метки сэмплов на суммарную длительность пауз, чтобы
+    // вырезать простой и получить бесшовный таймлайн. Всё — на sampleQueue.
+    private var paused = false
+    private var accumulatedPause = CMTime.zero
+    private var pauseStartPTS: CMTime?
     let tempURL: URL
     let finalURL: URL
     let videoFinalURL: URL?
@@ -128,6 +133,14 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         try await stream.startCapture()
         self.stream = stream
+    }
+
+    func pause() {
+        sampleQueue.async { self.paused = true }
+    }
+
+    func resume() {
+        sampleQueue.async { self.paused = false }
     }
 
     /// Останавливает захват, сводит дорожки и возвращает пути к готовым файлам.
@@ -239,13 +252,57 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
     }
 
     private func append(_ sampleBuffer: CMSampleBuffer, to input: AVAssetWriterInput) {
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
+        if paused {
+            // Отбрасываем сэмпл, но запоминаем границу начала паузы.
+            if pauseStartPTS == nil { pauseStartPTS = pts }
+            return
+        }
+        // Первый сэмпл после возобновления — прибавляем длительность паузы к смещению.
+        if let start = pauseStartPTS {
+            accumulatedPause = CMTimeAdd(accumulatedPause, CMTimeSubtract(pts, start))
+            pauseStartPTS = nil
+        }
+
         if !sessionStarted {
-            writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+            writer.startSession(atSourceTime: pts) // смещение здесь ещё нулевое
             sessionStarted = true
         }
-        if input.isReadyForMoreMediaData {
-            input.append(sampleBuffer)
+
+        let toWrite: CMSampleBuffer
+        if accumulatedPause == .zero {
+            toWrite = sampleBuffer
+        } else if let shifted = retimed(sampleBuffer, offset: accumulatedPause) {
+            toWrite = shifted
+        } else {
+            return
         }
+        if input.isReadyForMoreMediaData {
+            input.append(toWrite)
+        }
+    }
+
+    /// Копия сэмпла со сдвигом всех временных меток назад на `offset`.
+    private func retimed(_ buffer: CMSampleBuffer, offset: CMTime) -> CMSampleBuffer? {
+        var count: CMItemCount = 0
+        CMSampleBufferGetSampleTimingInfoArray(buffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &count)
+        guard count > 0 else { return nil }
+        var timings = [CMSampleTimingInfo](repeating: CMSampleTimingInfo(), count: count)
+        CMSampleBufferGetSampleTimingInfoArray(buffer, entryCount: count, arrayToFill: &timings, entriesNeededOut: &count)
+        for i in timings.indices {
+            if timings[i].presentationTimeStamp.isValid {
+                timings[i].presentationTimeStamp = CMTimeSubtract(timings[i].presentationTimeStamp, offset)
+            }
+            if timings[i].decodeTimeStamp.isValid {
+                timings[i].decodeTimeStamp = CMTimeSubtract(timings[i].decodeTimeStamp, offset)
+            }
+        }
+        var out: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault, sampleBuffer: buffer,
+            sampleTimingEntryCount: count, sampleTimingArray: &timings, sampleBufferOut: &out)
+        return status == noErr ? out : nil
     }
 
     private func isCompleteFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {

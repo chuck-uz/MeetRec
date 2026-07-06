@@ -21,6 +21,9 @@ struct ContentView: View {
         VStack(spacing: 16) {
             header
             recordButton
+            if state.isRecording && !state.isSaving {
+                pauseControl
+            }
             statusLine
             if let message = state.errorMessage {
                 errorCard(message)
@@ -72,23 +75,46 @@ struct ContentView: View {
             .buttonStyle(.borderless)
             .pointingCursor()
             .help(state.floatOnTop ? "Не закреплять поверх окон" : "Закрепить поверх всех окон")
-            Text(state.isRecording ? "Запись" : (state.isSaving ? "Сохранение" : "Готов"))
+            Text(statusLabel)
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(
-                    Capsule().fill(state.isRecording
+                    Capsule().fill(statusIsActive
                         ? Design.destructive.opacity(0.15)
                         : Design.primary.opacity(0.12))
                 )
-                .foregroundStyle(state.isRecording ? Design.destructive : Design.primary)
+                .foregroundStyle(statusIsActive ? Design.destructive : Design.primary)
         }
+    }
+
+    private var statusLabel: String {
+        if state.isPaused { return "Пауза" }
+        if state.isRecording { return "Запись" }
+        if state.isSaving { return "Сохранение" }
+        return "Готов"
+    }
+
+    private var statusIsActive: Bool {
+        state.isRecording && !state.isPaused
+    }
+
+    private var pauseControl: some View {
+        Button(action: state.pauseResume) {
+            Label(state.isPaused ? "Продолжить" : "Пауза",
+                  systemImage: state.isPaused ? "play.fill" : "pause.fill")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(state.isPaused ? Design.accent : Design.primary)
+        }
+        .buttonStyle(.bordered)
+        .pointingCursor()
+        .help(state.isPaused ? "Продолжить запись" : "Приостановить запись (простой не попадёт в файл)")
     }
 
     private var recordButton: some View {
         Button(action: state.toggle) {
             ZStack {
-                if state.isRecording && !reduceMotion {
+                if state.isRecording && !state.isPaused && !reduceMotion {
                     Circle()
                         .stroke(Design.destructive.opacity(0.35), lineWidth: 3)
                         .frame(width: 84, height: 84)
