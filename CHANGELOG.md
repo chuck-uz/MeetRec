@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11] — 2026-07-06
+
+### Added
+- **Check for updates**: a "Проверить обновления…" menu item queries the latest
+  GitHub release and offers to open the release page if a newer version exists.
+  A daily background check surfaces an "обновить" badge in the window header.
+- **App version** shown next to the "MeetRec" title in the window.
+
 ## [1.10] — 2026-07-06
 
 ### Added

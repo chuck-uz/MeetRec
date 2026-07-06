@@ -77,6 +77,7 @@ final class AppState: ObservableObject {
     @Published var recordingSizeText: String?
     @Published var chatTranscript: URL?
     @Published var meetingsTarget: MeetingsTarget?
+    @Published var availableUpdate: AppRelease?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
     @Published var calendarConnected = false
@@ -112,6 +113,7 @@ final class AppState: ObservableObject {
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
         checkModelUpdate()
+        checkForUpdates(manual: false)
 
         calendarConfigured = GoogleOAuthConfig.load() != nil
         calendarConnected = GoogleAuth.shared.isConnected
@@ -208,6 +210,63 @@ final class AppState: ObservableObject {
             identifier: "MEETING_START", actions: [record], intentIdentifiers: [])
         center.setNotificationCategories([category])
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
+    }
+
+    // MARK: - Обновления приложения
+
+    /// Проверка обновлений. manual=true — показываем результат в любом случае;
+    /// авто-проверка (manual=false) молчит, если новой версии нет, и не чаще раза в сутки.
+    func checkForUpdates(manual: Bool) {
+        if !manual {
+            let last = UserDefaults.standard.object(forKey: "lastUpdateCheck") as? Date ?? .distantPast
+            guard Date().timeIntervalSince(last) > 86_400 else { return }
+            UserDefaults.standard.set(Date(), forKey: "lastUpdateCheck")
+        }
+        Task {
+            guard let latest = await UpdateChecker.latestRelease() else {
+                if manual { presentUpdateAlert(title: "Не удалось проверить обновления",
+                                               text: "Проверьте интернет и попробуйте позже.", release: nil) }
+                return
+            }
+            if UpdateChecker.isNewer(latest.version, than: UpdateChecker.currentVersion) {
+                availableUpdate = latest
+                if manual {
+                    presentUpdateAlert(
+                        title: "Доступна версия \(latest.version)",
+                        text: "У вас установлена \(UpdateChecker.currentVersion). Открыть страницу релиза, чтобы скачать обновление?",
+                        release: latest)
+                }
+            } else {
+                availableUpdate = nil
+                if manual {
+                    presentUpdateAlert(title: "Установлена последняя версия",
+                                       text: "MeetRec \(UpdateChecker.currentVersion) — обновлений нет.", release: nil)
+                }
+            }
+        }
+    }
+
+    func openLatestRelease() {
+        if let url = availableUpdate?.pageURL {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func presentUpdateAlert(title: String, text: String, release: AppRelease?) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        if let release {
+            alert.addButton(withTitle: "Открыть страницу релиза")
+            alert.addButton(withTitle: "Позже")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(release.pageURL)
+            }
+        } else {
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     /// Раз в сутки сверяет модель распознавания с манифестом в репозитории
