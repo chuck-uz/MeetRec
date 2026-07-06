@@ -108,6 +108,16 @@ AVFoundation ──────► microphone  ──┘                        
 - `whisper-cli` is statically compiled (Metal embedded, system frameworks only) and bundled inside the app — the DMG is fully self-contained.
 - Transcription runs `afconvert` → `whisper-cli` → JSON → Markdown, entirely offline.
 
+## For developers
+
+In-depth technical documentation:
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design: the pipeline, every
+  subsystem (recording, transcription, diarization, local LLM, RAG search,
+  calendar), data model, concurrency, key decisions.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — build, run, add a feature, release;
+  conventions and code signing.
+
 ## Building from source
 
 ```sh
