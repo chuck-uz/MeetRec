@@ -1,193 +1,208 @@
-# Changelog
+# История изменений
 
-All notable changes to this project are documented here.
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project adheres to [Semantic Versioning](https://semver.org/).
+Здесь описаны все значимые изменения проекта.
+Формат — по [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
+версии — по [семантическому версионированию](https://semver.org/lang/ru/).
+English version: [CHANGELOG.en.md](CHANGELOG.en.md).
+
+## [1.15] — 2026-07-06
+
+### Добавлено
+- **Выбор модели ИИ под ваше железо**: новый экран «Модель ИИ» (шестерёнка в
+  шапке окна) позволяет выбрать локальную модель для чата и итогов — Qwen 2.5
+  **3B / 7B / 14B**. Для каждой модели показан статус под ваш Mac (по объёму
+  общей памяти): **Рекомендуется** (самая мощная, что работает с запасом),
+  **Доступно**, **Впритык** (запустится, но памяти в обрез) или **Не хватит
+  памяти** (выбор заблокирован, показано, сколько ГБ нужно). Кнопка «Скачать
+  сейчас» загружает модель заранее с индикатором прогресса; иначе она догрузится
+  сама при первом чате. Скачанные модели можно удалить, чтобы освободить диск.
+  Явный выбор пользователя сохраняется и больше не перетирается манифестом
+  `models.json`.
 
 ## [1.14] — 2026-07-06
 
-### Changed
-- **Much richer summaries**: the auto-summary and chat "Саммари" prompts were
-  rewritten to produce a detailed, structured result — context, key discussion
-  and participants' positions, decisions, action items with owners, and open
-  questions — instead of a few shallow bullets.
+### Изменено
+- **Гораздо более содержательные итоги**: промпты авто-итогов и кнопки «Саммари»
+  в чате переписаны так, чтобы давать подробный структурированный результат —
+  контекст, ключевое обсуждение и позиции участников, решения, задачи с
+  исполнителями и открытые вопросы — вместо нескольких поверхностных пунктов.
 
-### Fixed
-- **Memory / model-load timeouts**: stale `llama-server` processes left over from
-  a crashed session (each holding ~5 GB) are now killed on launch, and the model
-  servers are shut down on quit. This was the cause of the summary "load timeout"
-  errors.
+### Исправлено
+- **Память / таймауты загрузки модели**: осиротевшие процессы `llama-server` от
+  упавшей сессии (каждый держал ~5 ГБ) теперь снимаются при запуске, а серверы
+  моделей корректно останавливаются при выходе. Это и было причиной ошибок
+  «таймаут загрузки» при сборке итогов.
 
 ## [1.13] — 2026-07-06
 
-### Changed
-- **Much better transcription quality**: voice-activity detection (VAD, Silero,
-  bundled) is now always on — it cuts silence and eliminates the repetition
-  hallucinations Whisper produced on pauses (e.g. "ну отлично" repeated). A new
-  **recognition language** picker (Auto / Russian / English / …, defaults to the
-  system language) forces the right language instead of shaky auto-detect.
-  On real meetings this fixed garbled jargon and names (Kubernetes, Ubuntu 24.04,
-  Cloudflare, FortiGate…).
+### Изменено
+- **Заметно лучше качество транскрибации**: детектор речи (VAD, Silero, вшит)
+  теперь всегда включён — он вырезает тишину и убирает повторы-галлюцинации,
+  которые Whisper выдавал на паузах (например, «ну отлично» много раз подряд).
+  Добавлен выбор **языка распознавания** (Авто / Русский / Английский / …, по
+  умолчанию язык системы) — вместо шаткого автоопределения. На реальных встречах
+  это починило искажённый жаргон и имена (Kubernetes, Ubuntu 24.04, Cloudflare,
+  FortiGate…).
 
 ## [1.12] — 2026-07-06
 
-### Added
-- **Error logs**: MeetRec now writes a log to `~/Library/Logs/MeetRec/MeetRec.log`
-  (recording, transcription, summary, model-load events and all errors). New
-  "Показать логи…" menu item and a "Показать логи" button on error cards reveal
-  the file in Finder so it can be shared for diagnosis.
+### Добавлено
+- **Логи ошибок**: MeetRec пишет журнал в `~/Library/Logs/MeetRec/MeetRec.log`
+  (события записи, транскрибации, итогов, загрузки модели и все ошибки). Новый
+  пункт меню «Показать логи…» и кнопка «Показать логи» на карточке ошибки
+  открывают файл в Finder — можно прислать для разбора.
 
-### Changed
-- Error messages are shown in full (multi-line, selectable) instead of being
-  truncated.
-- The local model load now waits longer (up to 180 s) and captures the model
-  server's stderr, so failures report the real cause (e.g. out of memory).
+### Изменено
+- Тексты ошибок показываются целиком (многострочно, с выделением) вместо обрезки.
+- Загрузка локальной модели ждёт дольше (до 180 с) и собирает stderr сервера
+  модели — теперь сбой сообщает реальную причину (например, нехватку памяти).
 
 ## [1.11] — 2026-07-06
 
-### Added
-- **Check for updates**: a "Проверить обновления…" menu item queries the latest
-  GitHub release and offers to open the release page if a newer version exists.
-  A daily background check surfaces an "обновить" badge in the window header.
-- **App version** shown next to the "MeetRec" title in the window.
+### Добавлено
+- **Проверка обновлений**: пункт меню «Проверить обновления…» запрашивает
+  последний релиз на GitHub и предлагает открыть страницу релиза, если вышла
+  новая версия. Ежедневная фоновая проверка показывает бейдж «обновить» в шапке.
+- **Версия приложения** показана рядом с надписью «MeetRec» в окне.
 
 ## [1.10] — 2026-07-06
 
-### Added
-- **"Мои встречи" — unified window**: a wide split-view window with all recordings
-  in the sidebar and, on the right, an AI chat for the selected recording plus
-  quick actions (open audio/video, transcript, summary). The global archive
-  search now lives in the same window (top of the sidebar). Replaces the separate
-  chat and search windows.
+### Добавлено
+- **«Мои встречи» — единое окно**: широкое окно со списком всех записей слева и
+  ИИ-чатом по выбранной записи справа, плюс быстрые действия (открыть аудио/видео,
+  транскрипт, итоги). Поиск по всему архиву теперь живёт в этом же окне (вверху
+  боковой панели). Заменяет отдельные окна чата и поиска.
 
 ## [1.9] — 2026-07-06
 
-### Added
-- **Pause / resume recording**: a pause button next to the record button (and a
-  menu bar item) suspends recording; the paused interval is cut out of the final
-  file so the timeline stays seamless — no silence gap. Works for audio and
-  screen video (tracks stay in sync via sample-timestamp offsetting). The timer
-  freezes while paused and shows active recording time.
+### Добавлено
+- **Пауза / продолжение записи**: кнопка паузы рядом с кнопкой записи (и пункт в
+  меню-баре) приостанавливает запись; пауза вырезается из итогового файла, поэтому
+  таймлайн остаётся без «дыр» тишины. Работает для аудио и видео экрана (дорожки
+  синхронны за счёт сдвига меток сэмплов). Таймер на паузе замирает и показывает
+  чистое время записи.
 
 ## [1.8] — 2026-07-06
 
-### Added
-- **Automatic meeting summary** (optional toggle, Macs with 16+ GB): after
-  transcription the local LLM writes a structured summary — «Кратко / Решения /
-  Задачи (action items)» — saved as a companion `… — итоги.md` next to the
-  recording. Can also be generated on demand per recording. Summaries are kept
-  out of the archive search index. Fully on-device.
+### Добавлено
+- **Автоматические итоги встречи** (опциональный тумблер, Mac от 16 ГБ): после
+  транскрибации локальная модель пишет структурированные итоги — «Кратко /
+  Решения / Задачи (action items)» — рядом с записью в файл `… — итоги.md`. Можно
+  собрать и вручную по каждой записи. Итоги исключены из индекса поиска по архиву.
+  Полностью на устройстве.
 
 ## [1.7] — 2026-07-06
 
-### Added
-- **Global archive search / local RAG** (Macs with 16+ GB unified memory): ask a
-  question across *all* past meetings and get an answer with cited sources.
-  Fully on-device — transcripts are chunked, embedded with **bge-m3** (llama.cpp,
-  Metal), and stored in a local SQLite index (FTS5 keyword + vector search fused
-  via Reciprocal Rank Fusion). The retrieved fragments are answered by the same
-  local Qwen 2.5 model. Nothing leaves the Mac.
-- New meetings are indexed automatically after transcription; existing transcripts
-  are indexed on first opening the search window.
-- Embedding model (~0.4 GB) downloads automatically on first use.
+### Добавлено
+- **Поиск по всему архиву / локальный RAG** (Mac от 16 ГБ общей памяти): задайте
+  вопрос сразу по *всем* прошедшим встречам и получите ответ со ссылками на
+  источники. Полностью на устройстве — транскрипты режутся на фрагменты,
+  векторизуются моделью **bge-m3** (llama.cpp, Metal) и хранятся в локальном
+  индексе SQLite (поиск по ключевым словам FTS5 + векторный, объединённые через
+  Reciprocal Rank Fusion). Найденные фрагменты отвечает та же локальная Qwen 2.5.
+  Ничего не покидает Mac.
+- Новые встречи индексируются автоматически после транскрибации; уже имеющиеся
+  транскрипты индексируются при первом открытии окна поиска.
+- Модель эмбеддингов (~0,4 ГБ) скачивается автоматически при первом использовании.
 
 ## [1.6] — 2026-07-06
 
-### Added
-- **Local AI chat per meeting** (Macs with 16+ GB unified memory): a chat
-  window over any transcript — summary, action items, decisions, follow-up
-  email templates or free-form questions. Powered by a bundled static
-  `llama-server` (llama.cpp, Metal) running Qwen 2.5 7B Instruct (Q4_K_M,
-  ~4.7 GB, downloaded automatically on first use). Fully offline; the model
-  is unloaded after 5 minutes of inactivity to free memory.
-- The LLM can be swapped remotely via the `models.json` manifest (`llm` key).
+### Добавлено
+- **Локальный ИИ-чат по встрече** (Mac от 16 ГБ общей памяти): окно чата по
+  любому транскрипту — итоги, action items, решения, шаблоны письма-фоллоуапа или
+  свободные вопросы. Работает на вшитом статическом `llama-server` (llama.cpp,
+  Metal) с моделью Qwen 2.5 7B Instruct (Q4_K_M, ~4,7 ГБ, скачивается
+  автоматически при первом использовании). Полностью офлайн; модель выгружается
+  после 5 минут простоя, освобождая память.
+- Модель ИИ можно заменить удалённо через манифест `models.json` (ключ `llm`).
 
-### Changed
-- Model downloads unified into a shared downloader (Whisper + LLM).
+### Изменено
+- Загрузки моделей объединены в общий загрузчик (Whisper + LLM).
 
 ## [1.5] — 2026-07-05
 
-### Added
-- **Launch at login**: a checkbox in the window footer registers MeetRec as a
-  login item (SMAppService), so recording is always one click away.
+### Добавлено
+- **Автозапуск при входе**: галочка в подвале окна регистрирует MeetRec как
+  элемент входа (SMAppService) — запись всегда в один клик.
 
-### Fixed
-- README accuracy pass: button description matched to the actual UI, roadmap
-  section removed, architecture notes updated for video recording.
+### Исправлено
+- Сверка README с реальностью: описание кнопки приведено к фактическому UI,
+  раздел планов убран, заметки об архитектуре обновлены под запись видео.
 
 ## [1.4] — 2026-07-05
 
-### Added
-- **Speaker diarization** (optional toggle): transcripts become a dialog —
-  «Спикер 1 [00:12]: …» — powered by [FluidAudio](https://github.com/FluidInference/FluidAudio)
-  CoreML models (pyannote-based), fully on-device. Models (~30 MB) download
-  automatically on first use. If diarization fails, the plain transcript is
-  saved unchanged.
+### Добавлено
+- **Диаризация говорящих** (опциональный тумблер): транскрипт становится диалогом
+  — «Спикер 1 [00:12]: …» — на моделях [FluidAudio](https://github.com/FluidInference/FluidAudio)
+  (CoreML, на базе pyannote), полностью на устройстве. Модели (~30 МБ) скачиваются
+  автоматически при первом использовании. Если диаризация не удалась, сохраняется
+  обычный транскрипт без изменений.
 
-### Changed
-- Build migrated from a plain `swiftc` invocation to Swift Package Manager
-  (`Package.swift`); `./build.sh` works as before.
+### Изменено
+- Сборка переведена с прямого вызова `swiftc` на Swift Package Manager
+  (`Package.swift`); `./build.sh` работает как прежде.
 
 ## [1.3] — 2026-07-05
 
-### Added
-- **Screen video recording** (optional toggle): captures the main display at
-  30 fps (HEVC, hardware-encoded on the fly, up to 2560 px wide) alongside
-  audio. Produces two files: the usual `.m4a` for transcription plus an `.mp4`
-  with the screen video and mixed audio — finalized in seconds via remux,
-  no re-encoding.
-- Live recording size indicator under the timer while video is enabled.
-- Film button next to recordings that have a video file.
+### Добавлено
+- **Запись видео экрана** (опциональный тумблер): захват основного дисплея на
+  30 к/с (HEVC, аппаратное кодирование на лету, до 2560 px по ширине) вместе со
+  звуком. Даёт два файла: обычный `.m4a` для транскрибации и `.mp4` с видео экрана
+  и сведённым звуком — финализируется за секунды через ремукс, без перекодирования.
+- Индикатор размера записи под таймером при включённом видео.
+- Кнопка-«плёнка» рядом с записями, у которых есть видеофайл.
 
 ## [1.2.1] — 2026-07-05
 
-### Changed
-- MeetRec now appears in the Dock and Cmd+Tab and can be kept in the Dock;
-  the menu bar icon with the recording timer remains.
-- Quitting via Cmd+Q or the Dock during a recording now stops and saves the
-  recording before the app exits.
+### Изменено
+- MeetRec теперь появляется в Dock и Cmd+Tab, его можно закрепить в Dock; значок
+  с таймером в меню-баре остаётся.
+- Выход через Cmd+Q или из Dock во время записи теперь останавливает и сохраняет
+  запись перед завершением приложения.
 
 ## [1.2] — 2026-07-05
 
-### Added
-- **Google Calendar integration** (OAuth 2.0 PKCE with loopback redirect, tokens
-  in the macOS Keychain, read-only scope):
-  - recordings are automatically named after the current meeting;
-  - transcript header includes meeting title, time and attendees;
-  - the next meeting is shown in the main window;
-  - a "Meeting started" notification offers one-click recording.
-- OAuth client credentials are read from a local `google_oauth.json`
-  (never bundled or committed); `google_oauth.example.json` documents the format.
+### Добавлено
+- **Интеграция с Google Календарём** (OAuth 2.0 PKCE с loopback-редиректом, токены
+  в Keychain macOS, доступ только на чтение):
+  - записи автоматически называются по текущей встрече;
+  - в шапке транскрипта — название встречи, время и участники;
+  - ближайшая встреча показана в главном окне;
+  - уведомление «Встреча началась» предлагает запись в один клик.
+- Учётные данные OAuth читаются из локального `google_oauth.json` (никогда не
+  вшиваются и не коммитятся); формат описан в `google_oauth.example.json`.
 
-### Notes
-- Google verification is in progress; until it completes, each user needs their
-  own OAuth client for the calendar features (see README).
+### Примечания
+- Верификация Google в процессе; до её завершения каждому пользователю нужен свой
+  OAuth-клиент для функций календаря (см. README).
 
 ## [1.1] — 2026-07-05
 
-### Added
-- **Local transcription**: whisper.cpp `large-v3-turbo` (Metal-accelerated), runs
-  automatically after each recording; timestamped Markdown transcript is saved
-  next to the audio file. Language auto-detection.
-- Per-recording controls: transcribe manually, watch progress, open transcript.
-- Automatic Whisper model updates via the `models.json` manifest (checked daily).
-- Movable main window with hidden title bar and a pin-on-top toggle.
-- Menu bar quick actions: start/stop with timer, open window, open folder, quit.
-- Single-instance guard: launching a second copy focuses the running one;
-  re-opening the app always shows the window.
+### Добавлено
+- **Локальная транскрибация**: whisper.cpp `large-v3-turbo` (ускорение Metal),
+  запускается автоматически после каждой записи; транскрипт в Markdown с
+  таймкодами сохраняется рядом с аудио. Автоопределение языка.
+- Управление по каждой записи: транскрибировать вручную, следить за прогрессом,
+  открыть транскрипт.
+- Автообновление модели Whisper через манифест `models.json` (сверка раз в сутки).
+- Подвижное главное окно со скрытым заголовком и закреплением поверх окон.
+- Быстрые действия в меню-баре: старт/стоп с таймером, открыть окно, открыть папку,
+  выход.
+- Защита от второго экземпляра: запуск второй копии переводит фокус на работающую;
+  повторное открытие всегда показывает окно.
 
-### Changed
-- Main UI moved from an anchored menu-bar panel to a regular draggable window.
-- `whisper-cli` (static arm64 build, Metal embedded) is bundled inside the app —
-  the DMG stays fully self-contained.
+### Изменено
+- Основной UI переехал с прикреплённой панели меню-бара на обычное подвижное окно.
+- `whisper-cli` (статическая сборка arm64 с вшитым Metal) упакован внутрь
+  приложения — DMG остаётся полностью автономным.
 
 ## [1.0] — 2026-07-05
 
-Initial release.
+Первый релиз.
 
-- System audio + microphone recording into a single `.m4a` (ScreenCaptureKit,
-  48 kHz AAC), with a raw two-track fallback so recordings are never lost.
-- Menu bar app with recording timer, recent recordings list, output folder
-  picker and automatic Google Drive detection.
-- DMG installer; ad-hoc signed app bundle with generated icon.
-- Minimal CLI variant (`meetrec`).
+- Запись системного звука + микрофона в один `.m4a` (ScreenCaptureKit, 48 кГц AAC)
+  с запасным вариантом из двух сырых дорожек, чтобы записи не терялись.
+- Приложение в меню-баре с таймером записи, списком последних записей, выбором
+  папки вывода и автоопределением Google Диска.
+- DMG-установщик; подписанный ad-hoc бандл с сгенерированной иконкой.
+- Минимальный CLI-вариант (`meetrec`).

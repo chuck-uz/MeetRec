@@ -16,8 +16,32 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openWindow) private var openWindow
     @State private var pulsing = false
+    @State private var screen: Screen = .main
+
+    private enum Screen { case main, model }
 
     var body: some View {
+        Group {
+            switch screen {
+            case .main: recorderScreen
+            case .model:
+                ModelSettingsView(onBack: { screen = .main })
+                    .padding(16)
+                    .padding(.top, 22)
+            }
+        }
+        .frame(width: 320)
+        .background(WindowAccessor { window in
+            state.mainWindow = window
+            window.isMovableByWindowBackground = true
+            window.isReleasedWhenClosed = false
+        })
+        .onAppear {
+            WindowBridge.shared.open = { openWindow(id: "main") }
+        }
+    }
+
+    private var recorderScreen: some View {
         VStack(spacing: 16) {
             header
             recordButton
@@ -45,15 +69,6 @@ struct ContentView: View {
         }
         .padding(16)
         .padding(.top, 22) // место под кнопки закрытия окна
-        .frame(width: 320)
-        .background(WindowAccessor { window in
-            state.mainWindow = window
-            window.isMovableByWindowBackground = true
-            window.isReleasedWhenClosed = false
-        })
-        .onAppear {
-            WindowBridge.shared.open = { openWindow(id: "main") }
-        }
     }
 
     // MARK: - Секции
@@ -93,6 +108,17 @@ struct ContentView: View {
             .buttonStyle(.borderless)
             .pointingCursor()
             .help(state.floatOnTop ? "Не закреплять поверх окон" : "Закрепить поверх всех окон")
+            if Hardware.supportsChat {
+                Button {
+                    screen = .model
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .pointingCursor()
+                .help("Выбор модели ИИ под ваше железо")
+            }
             Text(statusLabel)
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 8)

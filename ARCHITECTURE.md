@@ -68,16 +68,18 @@ All Swift lives in `app/Sources/` (single executable target `MeetRec`).
 | File | Lines | Responsibility |
 |---|---|---|
 | `MeetRecApp.swift` | 172 | `@main` App: window scenes (`main`, `meetings`), `MenuBarExtra`, `AppDelegate` (single-instance, notifications, terminate-while-recording) |
-| `AppState.swift` | 671 | **Central `@MainActor ObservableObject`** — all published state, orchestration of every subsystem, error routing to `Log` |
-| `ContentView.swift` | 724 | Main window UI (record button, feature cards, recent list, footer) |
+| `AppState.swift` | 729 | **Central `@MainActor ObservableObject`** — all published state, orchestration of every subsystem, error routing to `Log`, LLM model selection/downloads |
+| `ContentView.swift` | 750 | Main window UI (record button, feature cards, recent list, footer) + gear entry to the model screen |
 | `MeetingsView.swift` | 204 | "Мои встречи" split-view window (sidebar + chat/search detail) |
 | `ChatView.swift` | 248 | Per-meeting AI chat (view + `ChatViewModel`) |
+| `ModelSettingsView.swift` | 185 | AI-model picker screen — hardware fit badges, per-model download/delete |
 | `ArchiveSearchView.swift` | 226 | Global archive search UI (view + `ArchiveSearchModel`) |
 | `RecorderEngine.swift` | 318 | Capture → `AVAssetWriter` → mixdown/remux; pause via timestamp offset |
-| `Transcriber.swift` | 343 | `whisper-cli` orchestration, VAD, JSON → Markdown (plain or diarized) |
+| `Transcriber.swift` | 345 | `whisper-cli` orchestration, VAD, JSON → Markdown (plain or diarized) |
 | `DiarizationService.swift` | 68 | FluidAudio wrapper → speaker timeline |
 | `Summarizer.swift` | 66 | Transcript → structured summary via `LLMRuntime` |
-| `LLMRuntime.swift` | 238 | `actor` managing `llama-server`; streaming + one-shot generation |
+| `LLMRuntime.swift` | 249 | `actor` managing `llama-server`; streaming + one-shot generation; `Hardware` (RAM, chip) |
+| `LLMCatalog.swift` | 106 | LLM catalog (Qwen 3B/7B/14B) + per-model hardware fit and download state |
 | `EmbeddingService.swift` | 102 | `actor` managing a second `llama-server` in `--embedding` mode |
 | `ArchiveStore.swift` | 286 | `actor` over SQLite: chunks, FTS5, vector search, RRF fusion |
 | `ArchiveIndexer.swift` | 175 | Transcript parsing, chunking, indexing orchestration, RAG prompt |
@@ -177,6 +179,14 @@ is non-fatal — the plain transcript is written instead.
 - The server's **stderr is captured** so load failures report the real cause
   (e.g. out of memory), and it's **shut down after 5 minutes idle** to free RAM.
 - Gated by `Hardware.supportsChat` (≥ 16 GB unified memory).
+- **Model selection** (`LLMCatalog.swift` + `ModelSettingsView.swift`): the user
+  picks among Qwen 2.5 **3B / 7B / 14B** (Q4_K_M) from a gear screen in the main
+  window. Each model carries `minRAMGB`/`comfortRAMGB` thresholds; on Apple Silicon
+  the only real constraint is unified memory, so `fit(ramGB:)` classifies each as
+  *comfortable / tight / insufficient* and the best comfortable one is badged
+  **Рекомендуется**. A model can be pre-downloaded (progress) or is fetched lazily
+  on first use, and deleted to reclaim disk. An explicit choice sets
+  `llmModelUserChosen`, which stops the `models.json` manifest from overriding it.
 
 ### 5.5 Summarization — `Summarizer.swift`
 
