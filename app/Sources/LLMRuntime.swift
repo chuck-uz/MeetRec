@@ -41,6 +41,18 @@ private final class TokenBuffer: @unchecked Sendable {
     var text = ""
 }
 
+/// Потокобезопасный сбор stderr дочернего процесса (для диагностики сбоев).
+private final class ServerLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var text = ""
+    func append(_ s: String) { lock.lock(); text += s; lock.unlock() }
+    func tail(_ maxChars: Int = 300) -> String {
+        lock.lock(); defer { lock.unlock() }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.suffix(maxChars))
+    }
+}
+
 actor LLMRuntime {
     static let shared = LLMRuntime()
 
@@ -156,6 +168,7 @@ actor LLMRuntime {
         }
 
         onStatus("загрузка модели в память…")
+        Log.info("LLM: запуск llama-server, модель \(spec.file)")
         let chosenPort = Int.random(in: 49500..<64000)
         let process = Process()
         process.executableURL = binary
@@ -168,26 +181,43 @@ actor LLMRuntime {
             "--no-webui",
         ]
         process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        // Собираем stderr llama-server — в нём видна реальная причина сбоя (OOM и т.п.).
+        let errPipe = Pipe()
+        process.standardError = errPipe
+        let errLog = ServerLog()
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
+                errLog.append(text)
+            }
+        }
         try process.run()
         server = process
         port = chosenPort
         loadedModel = spec.file
 
-        // Ждём готовности (загрузка 7B с SSD — до ~20 с).
+        // Ждём готовности (холодная загрузка 7B может занять до ~3 минут при нагрузке).
+        let start = Date()
         let health = URL(string: "http://127.0.0.1:\(chosenPort)/health")!
-        for _ in 0..<240 {
+        for _ in 0..<360 {
             if !process.isRunning {
-                throw MeetRecError("llama-server завершился при запуске. Возможно, не хватает памяти.")
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                let tail = errLog.tail()
+                Log.error("LLM: llama-server упал при запуске. stderr: \(tail)")
+                throw MeetRecError("Не удалось загрузить локальную модель — возможно, не хватило памяти. \(tail)")
             }
             if let (_, response) = try? await URLSession.shared.data(from: health),
                (response as? HTTPURLResponse)?.statusCode == 200 {
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                Log.info(String(format: "LLM: модель загружена за %.1f с", Date().timeIntervalSince(start)))
                 return chosenPort
             }
             try await Task.sleep(nanoseconds: 500_000_000)
         }
+        errPipe.fileHandleForReading.readabilityHandler = nil
+        Log.error("LLM: модель не загрузилась за 180 с. stderr: \(errLog.tail())")
         shutdown()
-        throw MeetRecError("Модель не загрузилась за отведённое время.")
+        throw MeetRecError("Модель не загрузилась за отведённое время (180 с).")
     }
 
     /// Гасим сервер после 5 минут простоя.

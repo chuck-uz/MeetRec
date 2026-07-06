@@ -225,9 +225,30 @@ struct ContentView: View {
 
     private func errorCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
-                .foregroundStyle(Design.destructive)
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Design.destructive)
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(Design.destructive)
+                    .fixedSize(horizontal: false, vertical: true) // полный текст, без обрезки
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+                Button {
+                    state.errorMessage = nil
+                } label: {
+                    Image(systemName: "xmark").font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .pointingCursor()
+                .help("Скрыть")
+            }
+            HStack(spacing: 10) {
+                Button("Показать логи") { state.openLogs() }
+                    .controlSize(.small)
+                    .pointingCursor()
+                    .help("Открыть файл логов в Finder — можно прислать для разбора")
+            }
             if let issue = state.permissionIssue {
                 Text(issue == .microphone
                     ? "Разрешите MeetRec доступ в разделе «Микрофон», затем попробуйте снова."

@@ -69,6 +69,9 @@ struct MenuContent: View {
         Button("Проверить обновления…") {
             state.checkForUpdates(manual: true)
         }
+        Button("Показать логи…") {
+            state.openLogs()
+        }
         Button("Мои встречи…") {
             openWindow(id: "meetings")
             NSApp.activate(ignoringOtherApps: true)
