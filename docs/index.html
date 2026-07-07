@@ -88,8 +88,8 @@
 
   /* privacy band */
   .band{background:linear-gradient(135deg,var(--fg),#0B3B49);color:#EAF9FC;border-radius:24px;padding:52px 40px;text-align:center;position:relative;overflow:hidden}
-  .band::after{content:"";position:absolute;inset:0;background:radial-gradient(500px 260px at 80% 120%,rgba(34,211,238,.25),transparent 60%)}
-  .band > *{position:relative}
+  .band::after{content:"";position:absolute;inset:0;background:radial-gradient(500px 260px at 80% 120%,rgba(34,211,238,.25),transparent 60%);pointer-events:none}
+  .band > *{position:relative;z-index:1}
   .band h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.02em}
   .band p{color:#B9E6EF;font-size:17px;max-width:56ch;margin:16px auto 0}
   .band .btn-primary{margin-top:28px}
