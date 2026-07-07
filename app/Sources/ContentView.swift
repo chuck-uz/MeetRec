@@ -26,11 +26,13 @@ struct ContentView: View {
             case .main: recorderScreen
             case .model:
                 ModelSettingsView(onBack: { screen = .main })
+                    .frame(maxWidth: 420)
+                    .frame(maxWidth: .infinity)
                     .padding(16)
                     .padding(.top, 22)
             }
         }
-        .frame(width: 320)
+        .frame(width: 680)
         .background(WindowAccessor { window in
             state.mainWindow = window
             window.isMovableByWindowBackground = true
@@ -41,18 +43,43 @@ struct ContentView: View {
         }
     }
 
+    // Вариант A: широкое окно в две колонки — слева запись/статус/записи,
+    // справа функциональные карточки. Высота больше не растёт бесконечно вниз.
     private var recorderScreen: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             header
+            if let message = state.errorMessage {
+                errorCard(message)
+            }
+            Divider()
+            HStack(alignment: .top, spacing: 20) {
+                leftColumn
+                rightColumn
+            }
+            Divider()
+            footer
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+        .padding(.top, 26) // зазор под кнопки закрытия окна
+    }
+
+    private var leftColumn: some View {
+        VStack(spacing: 12) {
             recordButton
             if state.isRecording && !state.isSaving {
                 pauseControl
             }
             statusLine
-            if let message = state.errorMessage {
-                errorCard(message)
+            if !state.recentRecordings.isEmpty {
+                recentSection
             }
-            Divider()
+        }
+        .frame(width: 250)
+    }
+
+    private var rightColumn: some View {
+        VStack(spacing: 10) {
             folderCard
             videoCard
             transcribeCard
@@ -61,14 +88,8 @@ struct ContentView: View {
                 summaryCard
             }
             calendarCard
-            if !state.recentRecordings.isEmpty {
-                recentSection
-            }
-            Divider()
-            footer
         }
-        .padding(16)
-        .padding(.top, 22) // место под кнопки закрытия окна
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Секции

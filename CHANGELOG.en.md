@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.17] — 2026-07-07
+
+### Changed
+- **New wide two-column main window**: the record button, status and "Последние
+  записи" (with the "Мои встречи" button) are on the left; the settings cards
+  (folder, video, transcription, diarization, auto-summary, calendar) on the right.
+  The window used to be a tall vertical strip that didn't fit on screen — it's now
+  compact in height and no longer grows downward. Top spacing tightened.
+
 ## [1.16] — 2026-07-07
 
 ### Changed
