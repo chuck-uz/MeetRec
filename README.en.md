@@ -13,7 +13,7 @@
 
 [Русская версия](README.md)
 
-<img src="docs/screenshot.png" width="560" alt="MeetRec main window">
+<img src="docs/screenshot-v117.png" width="560" alt="MeetRec main window">
 
 </div>
 
