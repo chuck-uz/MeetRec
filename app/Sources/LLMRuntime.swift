@@ -28,15 +28,17 @@ struct LLMSpec {
         url: "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         title: "Qwen 2.5 7B")
 
-    /// Текущая модель; может обновляться манифестом models.json.
+    /// Текущая модель. Явный выбор пользователя уважаем; иначе — модель по
+    /// умолчанию, подобранная под железо (LLMCatalog.defaultModel).
     static var current: LLMSpec {
         let defaults = UserDefaults.standard
-        guard let file = defaults.string(forKey: "llmModelFile"),
-              let url = defaults.string(forKey: "llmModelURL"), !file.isEmpty else {
-            return .fallback
+        if defaults.bool(forKey: "llmModelUserChosen"),
+           let file = defaults.string(forKey: "llmModelFile"),
+           let url = defaults.string(forKey: "llmModelURL"), !file.isEmpty {
+            return LLMSpec(file: file, url: url,
+                           title: defaults.string(forKey: "llmModelTitle") ?? file)
         }
-        return LLMSpec(file: file, url: url,
-                       title: defaults.string(forKey: "llmModelTitle") ?? file)
+        return LLMCatalog.defaultModel().spec
     }
 }
 
@@ -170,6 +172,11 @@ actor LLMRuntime {
         }
         let modelPath = Self.modelURL
         if !FileManager.default.fileExists(atPath: modelPath.path) {
+            // Разовое подтверждение перед первой загрузкой модели (может быть ~9 ГБ).
+            if let model = LLMCatalog.model(file: spec.file) {
+                let ok = await MainActor.run { AppState.confirmModelDownload(model) }
+                guard ok else { throw MeetRecError("Загрузка модели отменена. Выбрать модель полегче можно в «Модель ИИ» (шестерёнка).") }
+            }
             let sizeHint = LLMCatalog.model(file: spec.file).map { String(format: "~%.1f ГБ", $0.fileGB) } ?? "несколько ГБ"
             onStatus("скачивание модели \(spec.title) (\(sizeHint))…")
             guard let url = URL(string: spec.url) else {

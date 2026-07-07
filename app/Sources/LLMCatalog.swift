@@ -66,13 +66,24 @@ enum LLMCatalog {
         return all.first!
     }
 
-    /// Сейчас активная модель: явный выбор пользователя, иначе — что записал
-    /// манифест, иначе — рекомендация под железо.
+    /// Модель по умолчанию (пользователь не выбирал сам): рекомендованная под
+    /// железо. Но если рекомендованная ещё не скачана, а какая-то подходящая уже
+    /// есть на диске — берём её, чтобы не заставлять качать большую модель тех,
+    /// у кого уже что-то работает.
+    static func defaultModel(ramGB: Int = Hardware.ramGB) -> LLMModel {
+        let rec = recommended(ramGB: ramGB)
+        if isDownloaded(rec) { return rec }
+        if let downloaded = all.last(where: { isDownloaded($0) && ramGB >= $0.minRAMGB }) {
+            return downloaded
+        }
+        return rec
+    }
+
+    /// Сейчас активная модель: явный выбор пользователя, иначе — модель по умолчанию.
     static var current: LLMModel {
-        if let id = UserDefaults.standard.string(forKey: "llmModelID"),
+        if userChosen, let id = UserDefaults.standard.string(forKey: "llmModelID"),
            let m = model(id: id) { return m }
-        if let m = model(file: LLMSpec.current.file) { return m }
-        return recommended()
+        return defaultModel()
     }
 
     /// Пользователь выбрал модель вручную — фиксируем и защищаем от манифеста.
