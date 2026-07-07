@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.16] — 2026-07-07
+
+### Changed
+- **Default model is now the one recommended for your hardware**: a new user
+  starts on the most capable model their Mac runs comfortably (e.g. 14B on 24 GB)
+  instead of always 7B. If the recommended model isn't downloaded yet but another
+  suitable model already is, that one stays — so people who already have a working
+  model aren't forced to download a bigger one. An explicit pick in "Модель ИИ"
+  always wins.
+- **Confirmation before the first model download**: before fetching a model (which
+  can be ~9 GB) a dialog shows the size and hints that a lighter model can be chosen
+  in "Модель ИИ". No more silent multi-gigabyte downloads.
+
 ## [1.15] — 2026-07-06
 
 ### Added

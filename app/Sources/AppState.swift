@@ -341,6 +341,22 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Разовое подтверждение перед загрузкой модели (вызывается из LLMRuntime,
+    /// когда файла ещё нет на диске). Модальный диалог поверх любого окна.
+    @MainActor
+    static func confirmModelDownload(_ model: LLMModel) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Скачать модель \(model.title)?"
+        alert.informativeText = "Для работы ИИ модель нужно один раз загрузить "
+            + "(~\(String(format: "%.1f", model.fileGB)) ГБ). Она сохранится на вашем Mac "
+            + "и дальше работает локально, без интернета.\n\nМодель полегче можно выбрать "
+            + "в разделе «Модель ИИ» (шестерёнка в шапке окна)."
+        alert.addButton(withTitle: "Скачать")
+        alert.addButton(withTitle: "Отмена")
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// Удалить скачанную модель, чтобы освободить диск.
     func deleteModel(_ model: LLMModel) {
         if LLMCatalog.current.id == model.id {
