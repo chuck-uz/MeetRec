@@ -38,7 +38,7 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Check for updates** — a daily check against GitHub releases surfaces an "обновить" badge; the current version is shown right in the window header.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
-- **Screen video recording (optional)** — a toggle captures the whole screen at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
+- **Screen video recording (optional)** — a toggle captures video at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. Choose the **source**: the whole screen, a specific display, or a **single window**. When capturing a window, audio is still recorded in full (system + microphone), so the meeting audio is never lost even if you record a different window (a doc, slides). An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
 - **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, launch-at-login checkbox.
 
 ## Installation

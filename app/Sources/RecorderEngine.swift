@@ -1,4 +1,7 @@
-// Движок записи: системный звук + микрофон → один .m4a (ScreenCaptureKit)
+// Движок записи: системный звук + микрофон → один .m4a (ScreenCaptureKit).
+// Видео экрана — опционально. Источник видео: весь экран/дисплей или окно.
+// При захвате окна звук всё равно пишется ПОЛНЫМ (второй поток по дисплею),
+// чтобы не терять звук встречи, если снимаем не то окно, что его проигрывает.
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -15,15 +18,32 @@ struct RecordingResult {
     let videoURL: URL?
 }
 
-final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
+final class RecorderEngine: NSObject, SCStreamDelegate {
+    /// Маршрутизатор буферов конкретного потока в общий обработчик.
+    private final class Output: NSObject, SCStreamOutput {
+        let handler: (CMSampleBuffer, SCStreamOutputType) -> Void
+        init(_ handler: @escaping (CMSampleBuffer, SCStreamOutputType) -> Void) { self.handler = handler }
+        func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {
+            handler(buffer, type)
+        }
+    }
+
     private let writer: AVAssetWriter
     private let systemInput: AVAssetWriterInput
     private let micInput: AVAssetWriterInput
     private var videoInput: AVAssetWriterInput?
     private let captureVideo: Bool
+    private let videoSource: VideoSource
     private let sampleQueue = DispatchQueue(label: "meetrec.samples")
     private var sessionStarted = false
-    private var stream: SCStream?
+
+    // Потоки: аудио (полный звук + микрофон) и, при захвате окна, отдельный видео-поток.
+    private var audioStream: SCStream?
+    private var videoStream: SCStream?
+    private var audioOutput: Output?
+    private var videoOutput: Output?
+    private var videoFinished = false // видео-вход завершён (окно закрылось/стоп)
+
     // Пауза: сдвигаем метки сэмплов на суммарную длительность пауз, чтобы
     // вырезать простой и получить бесшовный таймлайн. Всё — на sampleQueue.
     private var paused = false
@@ -34,8 +54,10 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
     let videoFinalURL: URL?
     var onInterrupted: ((Error) -> Void)?
 
-    init(outputDir: URL, title: String? = nil, captureVideo: Bool = false) throws {
+    init(outputDir: URL, title: String? = nil, captureVideo: Bool = false,
+         videoSource: VideoSource = .wholeScreen) throws {
         self.captureVideo = captureVideo
+        self.videoSource = videoSource
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH.mm"
@@ -72,67 +94,144 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
 
     func start() async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first else {
+        guard let mainDisplay = content.displays.first else {
             throw MeetRecError("Не найден дисплей для захвата звука.")
         }
-        let filter = SCContentFilter(display: display, excludingWindows: [])
 
-        let config = SCStreamConfiguration()
+        // Разрешаем выбранный источник в актуальные объекты.
+        var window: SCWindow?
+        var audioDisplay = mainDisplay
+        if captureVideo {
+            switch videoSource {
+            case .window(let id):
+                window = content.windows.first { $0.windowID == id }
+                if window == nil { Log.error("Выбранное окно не найдено — пишу весь экран.") }
+            case .display(let id):
+                audioDisplay = content.displays.first { $0.displayID == id } ?? mainDisplay
+            }
+        }
+
+        let audioOutput = Output { [weak self] buffer, type in
+            guard let self, buffer.isValid else { return }
+            switch type {
+            case .audio: self.append(buffer, to: self.systemInput)
+            case .microphone: self.append(buffer, to: self.micInput)
+            default: break // видео-заглушка аудио-потока — игнорируем
+            }
+        }
+        let videoOutput = Output { [weak self] buffer, type in
+            guard let self, type == .screen, buffer.isValid,
+                  !self.videoFinished, let input = self.videoInput,
+                  buffer.imageBuffer != nil, self.isCompleteFrame(buffer) else { return }
+            self.append(buffer, to: input)
+        }
+        self.audioOutput = audioOutput
+        self.videoOutput = videoOutput
+
+        if captureVideo, let window {
+            // Двойной поток: A — полный звук + микрофон, B — видео окна.
+            let audioConfig = SCStreamConfiguration()
+            configureAudio(audioConfig)
+            configureDummyVideo(audioConfig)
+            let audioFilter = SCContentFilter(display: audioDisplay, excludingWindows: [])
+            let aStream = SCStream(filter: audioFilter, configuration: audioConfig, delegate: self)
+            try aStream.addStreamOutput(audioOutput, type: .audio, sampleHandlerQueue: sampleQueue)
+            try aStream.addStreamOutput(audioOutput, type: .microphone, sampleHandlerQueue: sampleQueue)
+            try aStream.addStreamOutput(audioOutput, type: .screen, sampleHandlerQueue: sampleQueue)
+
+            let videoFilter = SCContentFilter(desktopIndependentWindow: window)
+            let videoConfig = SCStreamConfiguration()
+            videoConfig.capturesAudio = false
+            configureVideo(videoConfig,
+                           pointWidth: Int(window.frame.width),
+                           pointHeight: Int(window.frame.height),
+                           scale: max(1, videoFilter.pointPixelScale))
+            let bStream = SCStream(filter: videoFilter, configuration: videoConfig, delegate: self)
+            try bStream.addStreamOutput(videoOutput, type: .screen, sampleHandlerQueue: sampleQueue)
+
+            audioStream = aStream
+            videoStream = bStream
+            guard writer.startWriting() else {
+                throw writer.error ?? MeetRecError("Не удалось начать запись файла.")
+            }
+            try await aStream.startCapture()
+            try await bStream.startCapture()
+        } else {
+            // Одиночный поток: весь экран/дисплей (звук + видео) либо только звук.
+            let config = SCStreamConfiguration()
+            configureAudio(config)
+            let filter = SCContentFilter(display: audioDisplay, excludingWindows: [])
+            if captureVideo {
+                configureVideo(config,
+                               pointWidth: audioDisplay.width,
+                               pointHeight: audioDisplay.height,
+                               scale: max(1, filter.pointPixelScale))
+            } else {
+                configureDummyVideo(config)
+            }
+            let stream = SCStream(filter: filter, configuration: config, delegate: self)
+            try stream.addStreamOutput(audioOutput, type: .audio, sampleHandlerQueue: sampleQueue)
+            try stream.addStreamOutput(audioOutput, type: .microphone, sampleHandlerQueue: sampleQueue)
+            try stream.addStreamOutput(videoOutput, type: .screen, sampleHandlerQueue: sampleQueue)
+
+            audioStream = stream
+            guard writer.startWriting() else {
+                throw writer.error ?? MeetRecError("Не удалось начать запись файла.")
+            }
+            try await stream.startCapture()
+        }
+    }
+
+    // MARK: - Конфигурация потоков
+
+    private func configureAudio(_ config: SCStreamConfiguration) {
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
         config.sampleRate = 48_000
         config.channelCount = 2
         config.captureMicrophone = true
+    }
 
-        if captureVideo {
-            // Пиксельный размер дисплея, ограниченный 2560 по ширине.
-            let scale = max(1, filter.pointPixelScale)
-            var pixelWidth = Int(Float(display.width) * scale)
-            var pixelHeight = Int(Float(display.height) * scale)
-            if pixelWidth > 2560 {
-                pixelHeight = pixelHeight * 2560 / pixelWidth
-                pixelWidth = 2560
-            }
-            pixelWidth &= ~1
-            pixelHeight &= ~1
-            config.width = pixelWidth
-            config.height = pixelHeight
-            config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-            config.showsCursor = true
-            config.queueDepth = 8
+    /// Минимальное «видео» для аудио-потока (поток обязан отдавать экран).
+    private func configureDummyVideo(_ config: SCStreamConfiguration) {
+        config.width = 2
+        config.height = 2
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        config.showsCursor = false
+    }
 
-            let videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.hevc,
-                AVVideoWidthKey: pixelWidth,
-                AVVideoHeightKey: pixelHeight,
-                AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 5_000_000,
-                    AVVideoExpectedSourceFrameRateKey: 30,
-                    AVVideoMaxKeyFrameIntervalKey: 120,
-                ],
-            ]
-            let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            input.expectsMediaDataInRealTime = true
-            writer.add(input)
-            videoInput = input
-        } else {
-            // Видео не нужно, но поток обязан его отдавать — сводим к минимуму.
-            config.width = 2
-            config.height = 2
-            config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
-            config.showsCursor = false
+    /// Настраивает реальное видео и создаёт видео-вход писателя (кап 2560 по ширине).
+    private func configureVideo(_ config: SCStreamConfiguration, pointWidth: Int, pointHeight: Int, scale: Float) {
+        var pixelWidth = Int(Float(pointWidth) * scale)
+        var pixelHeight = Int(Float(pointHeight) * scale)
+        if pixelWidth > 2560 {
+            pixelHeight = pixelHeight * 2560 / max(1, pixelWidth)
+            pixelWidth = 2560
         }
+        pixelWidth &= ~1
+        pixelHeight &= ~1
+        pixelWidth = max(2, pixelWidth)
+        pixelHeight = max(2, pixelHeight)
+        config.width = pixelWidth
+        config.height = pixelHeight
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        config.showsCursor = true
+        config.queueDepth = 8
 
-        let stream = SCStream(filter: filter, configuration: config, delegate: self)
-        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
-        try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: sampleQueue)
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-
-        guard writer.startWriting() else {
-            throw writer.error ?? MeetRecError("Не удалось начать запись файла.")
-        }
-        try await stream.startCapture()
-        self.stream = stream
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.hevc,
+            AVVideoWidthKey: pixelWidth,
+            AVVideoHeightKey: pixelHeight,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 5_000_000,
+                AVVideoExpectedSourceFrameRateKey: 30,
+                AVVideoMaxKeyFrameIntervalKey: 120,
+            ],
+        ]
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        input.expectsMediaDataInRealTime = true
+        writer.add(input)
+        videoInput = input
     }
 
     func pause() {
@@ -145,10 +244,10 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
 
     /// Останавливает захват, сводит дорожки и возвращает пути к готовым файлам.
     func stop() async throws -> RecordingResult {
-        if let stream {
-            try? await stream.stopCapture()
-        }
-        stream = nil
+        if let audioStream { try? await audioStream.stopCapture() }
+        if let videoStream { try? await videoStream.stopCapture() }
+        audioStream = nil
+        videoStream = nil
         sampleQueue.sync {} // дождаться уже поступивших буферов
         guard sessionStarted else {
             writer.cancelWriting()
@@ -157,7 +256,12 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         }
         systemInput.markAsFinished()
         micInput.markAsFinished()
-        videoInput?.markAsFinished()
+        sampleQueue.sync {
+            if !videoFinished {
+                videoFinished = true
+                videoInput?.markAsFinished()
+            }
+        }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             writer.finishWriting { cont.resume() }
         }
@@ -237,19 +341,7 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         try await export.export(to: destination, as: .m4a)
     }
 
-    // MARK: - SCStreamOutput
-
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sampleBuffer.isValid else { return }
-        switch type {
-        case .audio: append(sampleBuffer, to: systemInput)
-        case .microphone: append(sampleBuffer, to: micInput)
-        case .screen:
-            guard let videoInput, sampleBuffer.imageBuffer != nil, isCompleteFrame(sampleBuffer) else { return }
-            append(sampleBuffer, to: videoInput)
-        default: break
-        }
-    }
+    // MARK: - Приём буферов
 
     private func append(_ sampleBuffer: CMSampleBuffer, to input: AVAssetWriterInput) {
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -312,7 +404,20 @@ final class RecorderEngine: NSObject, SCStreamDelegate, SCStreamOutput {
         return status == SCFrameStatus.complete.rawValue
     }
 
+    // MARK: - SCStreamDelegate
+
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        onInterrupted?(error)
+        if stream === videoStream {
+            // Видео-поток умер (например, окно закрыли) — не роняем запись,
+            // завершаем только видео, аудио продолжаем писать.
+            sampleQueue.async {
+                guard !self.videoFinished else { return }
+                self.videoFinished = true
+                self.videoInput?.markAsFinished()
+            }
+            Log.error("Видео-поток остановлен (окно закрыто?): \(error.localizedDescription). Аудио продолжается.")
+        } else {
+            onInterrupted?(error)
+        }
     }
 }
