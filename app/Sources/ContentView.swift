@@ -41,6 +41,10 @@ struct ContentView: View {
         .onAppear {
             WindowBridge.shared.open = { openWindow(id: "main") }
         }
+        .sheet(isPresented: $state.sourceSheetVisible) {
+            SourcePickerSheet()
+                .environmentObject(state)
+        }
     }
 
     // Вариант A: широкое окно в две колонки — слева запись/статус/записи,
@@ -372,44 +376,12 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Видео экрана")
                     .font(.callout.weight(.medium))
-                Text(state.captureVideo ? "30 к/с · .mp4 рядом с аудио · звук всегда полный" : "записывается только звук")
+                Text(state.captureVideo ? "выбор источника при старте · 30 к/с · звук всегда полный" : "записывается только звук")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 4)
-            if state.captureVideo {
-                Menu {
-                    Button {
-                        state.refreshSourceOptions()
-                    } label: {
-                        Label("Обновить список", systemImage: "arrow.clockwise")
-                    }
-                    Divider()
-                    ForEach(state.sourceOptions) { option in
-                        Button {
-                            state.videoSource = option.source
-                        } label: {
-                            let title = option.subtitle.map { "\(option.title) — \($0)" } ?? option.title
-                            if option.source == state.videoSource {
-                                Label(title, systemImage: "checkmark")
-                            } else {
-                                Text(title)
-                            }
-                        }
-                    }
-                } label: {
-                    Text(state.currentSourceTitle)
-                        .font(.caption)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .menuStyle(.borderlessButton)
-                .frame(maxWidth: 150, alignment: .trailing)
-                .pointingCursor()
-                .disabled(state.isRecording || state.isSaving)
-                .help("Что записывать: весь экран, монитор или конкретное окно")
-            }
+            Spacer()
             Toggle("", isOn: $state.captureVideo)
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -423,10 +395,6 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: Design.corner)
                 .fill(Color.primary.opacity(0.05))
         )
-        .onAppear { if state.captureVideo { state.refreshSourceOptions() } }
-        .onChange(of: state.captureVideo) { _, on in
-            if on { state.refreshSourceOptions() }
-        }
     }
 
     private var transcribeCard: some View {

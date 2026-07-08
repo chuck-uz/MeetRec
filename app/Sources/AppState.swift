@@ -64,6 +64,7 @@ final class AppState: ObservableObject {
     // Источник видеозахвата (весь экран/дисплей/окно). Не персистим: окна эфемерны.
     @Published var videoSource: VideoSource = .wholeScreen
     @Published var sourceOptions: [CaptureSourceOption] = []
+    @Published var sourceSheetVisible = false // диалог выбора источника перед записью
     @Published var diarize: Bool {
         didSet { UserDefaults.standard.set(diarize, forKey: "diarize") }
     }
@@ -371,16 +372,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Источник видеозахвата
 
-    /// Заголовок выбранного источника для UI (например, «Весь экран» или имя окна).
-    var currentSourceTitle: String {
-        if let match = sourceOptions.first(where: { $0.source == videoSource }) {
-            return match.title
-        }
-        if case .window = videoSource { return "Выбранное окно" }
-        return "Весь экран"
-    }
-
-    /// Перечитывает доступные источники (окна динамичны — зовём при открытии меню).
+    /// Перечитывает доступные источники (окна динамичны — зовём при открытии диалога).
     func refreshSourceOptions() {
         Task {
             let options = await CaptureSources.list()
@@ -468,7 +460,28 @@ final class AppState: ObservableObject {
 
     func toggle() {
         guard !isSaving else { return }
-        if isRecording { stopAndSave() } else { start() }
+        if isRecording { stopAndSave() } else { requestStart() }
+    }
+
+    /// Старт записи. Если пишем видео — сначала спрашиваем источник (весь экран/
+    /// монитор/окно) с живым списком окон; иначе начинаем сразу.
+    func requestStart() {
+        guard !isRecording, !isSaving, !sourceSheetVisible else { return }
+        guard captureVideo else { start(); return }
+        refreshSourceOptions()
+        // Диалог живёт в главном окне — поднимем его (старт мог прийти из меню-бара).
+        WindowBridge.shared.open?()
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async { self.sourceSheetVisible = true }
+    }
+
+    func confirmSourceSheet() {
+        sourceSheetVisible = false
+        start()
+    }
+
+    func cancelSourceSheet() {
+        sourceSheetVisible = false
     }
 
     /// Проверяет права до запуска захвата: так пользователь получает системный

@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.19] — 2026-07-08
+
+### Changed
+- **Video source is chosen when you start recording**: with screen video enabled,
+  pressing Record opens a "Что записывать?" dialog with a live window list (whole
+  screen / display / window) — you pick the window at the moment it's open. The
+  inline source menu was removed from the card. With video off, recording starts
+  immediately.
+
 ## [1.18] — 2026-07-08
 
 ### Added
