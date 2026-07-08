@@ -61,7 +61,7 @@ final class ArchiveSearchModel: ObservableObject {
                         Task { @MainActor in self?.status = text }
                     })
             } catch {
-                answer = "⚠️ \(error.localizedDescription)"
+                answer = "Ошибка: \(error.localizedDescription)"
             }
             status = nil
             isBusy = false

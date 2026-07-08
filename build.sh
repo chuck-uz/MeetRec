@@ -19,7 +19,7 @@ if [ "$MODE" = "install" ] && pgrep -fq '/Applications/MeetRec.app/Contents/MacO
     sleep 0.5
   done
   if pgrep -fq '/Applications/MeetRec.app/Contents/MacOS/MeetRec'; then
-    echo "❌ MeetRec не закрылся (возможно, идёт запись). Установка отменена."
+    echo "Ошибка: MeetRec не закрылся (возможно, идёт запись). Установка отменена."
     exit 1
   fi
 fi
@@ -64,7 +64,7 @@ if security find-identity -v -p codesigning | grep -q "\"$SIGN_IDENTITY\""; then
   codesign --force -s "$SIGN_IDENTITY" \
     -i ru.dinya.meetrec "$APP"
 else
-  echo "⚠️  Сертификат «$SIGN_IDENTITY» не найден — подпись ad-hoc."
+  echo "Внимание: сертификат «$SIGN_IDENTITY» не найден — подпись ad-hoc."
   echo "   Права на запись экрана будут слетать при каждой пересборке!"
   codesign --force -s - -i ru.dinya.meetrec.whisper-cli \
     -r='designated => identifier "ru.dinya.meetrec.whisper-cli"' \
@@ -87,7 +87,7 @@ hdiutil create -volname "MeetRec — перетащите в Applications" \
   -srcfolder "$DMG_DIR" -ov -format UDZO dist/MeetRec.dmg >/dev/null
 rm -rf "$DMG_DIR" # чтобы Spotlight не находил лишнюю копию приложения
 
-echo "✅ Готово:"
+echo "Готово:"
 echo "   Приложение: $APP"
 echo "   Установщик: dist/MeetRec.dmg"
 
@@ -97,8 +97,8 @@ if [ "$MODE" = "install" ]; then
   cp -R "$APP" /Applications/
   echo "→ Запуск…"
   open /Applications/MeetRec.app
-  echo "✅ Установлено и запущено."
+  echo "Установлено и запущено."
 else
-  echo "ℹ️  Для установки используйте: ./build.sh install"
+  echo "Для установки используйте: ./build.sh install"
   echo "   (не заменяйте .app вручную при запущенном приложении)"
 fi
