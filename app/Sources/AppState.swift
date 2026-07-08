@@ -61,6 +61,9 @@ final class AppState: ObservableObject {
     @Published var captureVideo: Bool {
         didSet { UserDefaults.standard.set(captureVideo, forKey: "captureVideo") }
     }
+    // Источник видеозахвата (весь экран/дисплей/окно). Не персистим: окна эфемерны.
+    @Published var videoSource: VideoSource = .wholeScreen
+    @Published var sourceOptions: [CaptureSourceOption] = []
     @Published var diarize: Bool {
         didSet { UserDefaults.standard.set(diarize, forKey: "diarize") }
     }
@@ -366,6 +369,29 @@ final class AppState: ObservableObject {
         modelsRevision += 1
     }
 
+    // MARK: - Источник видеозахвата
+
+    /// Заголовок выбранного источника для UI (например, «Весь экран» или имя окна).
+    var currentSourceTitle: String {
+        if let match = sourceOptions.first(where: { $0.source == videoSource }) {
+            return match.title
+        }
+        if case .window = videoSource { return "Выбранное окно" }
+        return "Весь экран"
+    }
+
+    /// Перечитывает доступные источники (окна динамичны — зовём при открытии меню).
+    func refreshSourceOptions() {
+        Task {
+            let options = await CaptureSources.list()
+            sourceOptions = options
+            // Выбранное окно исчезло — откатываемся на весь экран.
+            if !options.contains(where: { $0.source == videoSource }) {
+                videoSource = .wholeScreen
+            }
+        }
+    }
+
     private func applyWindowLevel() {
         mainWindow?.level = floatOnTop ? .floating : .normal
     }
@@ -508,7 +534,7 @@ final class AppState: ObservableObject {
             do {
                 let meeting = currentMeeting
                 let title = meeting.map { sanitizeFileName($0.title) }
-                let engine = try RecorderEngine(outputDir: outputDir, title: title, captureVideo: captureVideo)
+                let engine = try RecorderEngine(outputDir: outputDir, title: title, captureVideo: captureVideo, videoSource: videoSource)
                 if let meeting {
                     meetingHeaders[engine.finalURL] = meetingHeader(for: meeting)
                 }

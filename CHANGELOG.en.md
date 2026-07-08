@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.18] — 2026-07-08
+
+### Added
+- **Video source selection**: with screen video enabled, choose what to capture —
+  the whole screen, a specific display, or a **single window** (picker in the
+  "Видео экрана" card). When capturing a window, audio is still recorded in **full**
+  (system + microphone) via a second stream — so you never lose the meeting audio if
+  you record a window that isn't the one playing it (e.g. a doc or slides during a
+  call). If the chosen window is closed mid-recording, video ends but audio keeps
+  recording.
+
 ## [1.17] — 2026-07-07
 
 ### Changed
