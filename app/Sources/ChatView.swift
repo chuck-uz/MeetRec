@@ -89,7 +89,7 @@ final class ChatViewModel: ObservableObject {
                         Task { @MainActor in self?.status = text }
                     })
             } catch {
-                messages[messages.count - 1].text = "⚠️ \(error.localizedDescription)"
+                messages[messages.count - 1].text = "Ошибка: \(error.localizedDescription)"
             }
             status = nil
             isGenerating = false
