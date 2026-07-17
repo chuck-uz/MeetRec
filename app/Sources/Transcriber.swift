@@ -225,7 +225,14 @@ final class Transcriber {
         let process = Process()
         process.executableURL = tool
         process.arguments = args
-        process.standardOutput = Pipe()
+        // stdout ОБЯЗАТЕЛЬНО дренируем: whisper-cli печатает туда сегменты по мере
+        // распознавания. Если не читать — буфер пайпа (~64 КБ) переполняется, запись
+        // блокируется и процесс зависает (проявлялось на записях >1 часа ~ на 30%).
+        let outPipe = Pipe()
+        process.standardOutput = outPipe
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            _ = handle.availableData // читаем и отбрасываем — результат берём из JSON-файла
+        }
         let errPipe = Pipe()
         process.standardError = errPipe
         if let onStderr {
@@ -242,6 +249,7 @@ final class Transcriber {
         try process.run()
         return await withCheckedContinuation { (cont: CheckedContinuation<Int32, Never>) in
             process.terminationHandler = { finished in
+                outPipe.fileHandleForReading.readabilityHandler = nil
                 errPipe.fileHandleForReading.readabilityHandler = nil
                 cont.resume(returning: finished.terminationStatus)
             }

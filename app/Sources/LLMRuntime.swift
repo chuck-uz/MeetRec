@@ -194,11 +194,12 @@ actor LLMRuntime {
             "-m", modelPath.path,
             "--host", "127.0.0.1",
             "--port", "\(chosenPort)",
-            "-c", "16384",       // контекст 16К — баланс память/длина транскрипта
+            "-c", "32768",       // контекст 32К (нативный для Qwen 2.5) — вмещает длинные транскрипты
             "-ngl", "99",        // все слои на GPU (Metal)
             "--no-webui",
         ]
-        process.standardOutput = Pipe()
+        // stdout сервера не читаем — направляем в /dev/null, чтобы пайп не переполнялся.
+        process.standardOutput = FileHandle.nullDevice
         // Собираем stderr llama-server — в нём видна реальная причина сбоя (OOM и т.п.).
         let errPipe = Pipe()
         process.standardError = errPipe
@@ -226,7 +227,9 @@ actor LLMRuntime {
             }
             if let (_, response) = try? await URLSession.shared.data(from: health),
                (response as? HTTPURLResponse)?.statusCode == 200 {
-                errPipe.fileHandleForReading.readabilityHandler = nil
+                // Сервер готов и будет работать дальше — продолжаем дренировать stderr
+                // (иначе за долгую сессию пайп переполнится), но уже без накопления в память.
+                errPipe.fileHandleForReading.readabilityHandler = { handle in _ = handle.availableData }
                 Log.info(String(format: "LLM: модель загружена за %.1f с", Date().timeIntervalSince(start)))
                 return chosenPort
             }

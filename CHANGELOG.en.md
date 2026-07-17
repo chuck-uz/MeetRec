@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.20] — 2026-07-17
+
+### Fixed
+- **Transcribing long recordings (>1 hour) no longer hangs.** `whisper-cli`'s
+  stdout wasn't being drained, so the pipe buffer filled (around 30%) and the
+  process deadlocked. stdout is now drained — recording length is no longer limited.
+- **Summaries and chat on long meetings.** The local LLM context was raised from
+  16K to 32K tokens (Qwen 2.5's native size), so long transcripts fit and summaries
+  generate without the "local model returned an error" failure. Also tidied up
+  `llama-server` output-pipe handling so a long session can't hang.
+
 ## [1.19] — 2026-07-08
 
 ### Changed
