@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [1.21] — 2026-07-18
+
+### Added
+- **Whole-meeting summaries for long recordings (map-reduce).** Previously a long
+  transcript was summarized from only its beginning and end (the middle was dropped).
+  Now a long transcript is split into chunks, each summarized separately, then the
+  partial summaries are merged into one — the whole meeting is covered. Short meetings
+  still use a single fast pass.
+
+### Fixed
+- **AI features (chat, summaries, search) sometimes failed with a "couldn't load
+  model" error.** The local model server picked a random port and failed if it was
+  taken by another app (e.g. an IDE's port). It now asks the OS for a guaranteed-free
+  port and retries a different one on collision — startup is reliable.
+
 ## [1.20] — 2026-07-17
 
 ### Fixed

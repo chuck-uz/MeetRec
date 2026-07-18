@@ -187,7 +187,31 @@ actor LLMRuntime {
 
         onStatus("загрузка модели в память…")
         Log.info("LLM: запуск llama-server, модель \(spec.file)")
-        let chosenPort = Int.random(in: 49500..<64000)
+
+        // Пробуем несколько портов: случайный мог оказаться занят чужим процессом
+        // (например, портом IDE). Берём гарантированно свободный у ОС + повтор при коллизии.
+        for _ in 0..<6 {
+            let chosenPort = Self.availablePort() ?? Int.random(in: 49500..<64000)
+            switch await launch(binary: binary, modelPath: modelPath, spec: spec, port: chosenPort) {
+            case .ready(let readyPort):
+                return readyPort
+            case .portBusy:
+                continue
+            case .failed(let stderr):
+                throw MeetRecError("Не удалось загрузить локальную модель — возможно, не хватило памяти. \(stderr)")
+            }
+        }
+        throw MeetRecError("Не удалось запустить локальную модель: не нашлось свободного порта. Закройте лишние приложения и попробуйте снова.")
+    }
+
+    private enum LaunchOutcome {
+        case ready(Int)
+        case portBusy
+        case failed(String)
+    }
+
+    /// Одна попытка запустить llama-server на заданном порту и дождаться готовности.
+    private func launch(binary: URL, modelPath: URL, spec: LLMSpec, port chosenPort: Int) async -> LaunchOutcome {
         let process = Process()
         process.executableURL = binary
         process.arguments = [
@@ -200,7 +224,7 @@ actor LLMRuntime {
         ]
         // stdout сервера не читаем — направляем в /dev/null, чтобы пайп не переполнялся.
         process.standardOutput = FileHandle.nullDevice
-        // Собираем stderr llama-server — в нём видна реальная причина сбоя (OOM и т.п.).
+        // Собираем stderr llama-server — в нём видна реальная причина сбоя (OOM, занятый порт и т.п.).
         let errPipe = Pipe()
         process.standardError = errPipe
         let errLog = ServerLog()
@@ -210,7 +234,12 @@ actor LLMRuntime {
                 errLog.append(text)
             }
         }
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            errPipe.fileHandleForReading.readabilityHandler = nil
+            return .failed(error.localizedDescription)
+        }
         server = process
         port = chosenPort
         loadedModel = spec.file
@@ -221,24 +250,57 @@ actor LLMRuntime {
         for _ in 0..<360 {
             if !process.isRunning {
                 errPipe.fileHandleForReading.readabilityHandler = nil
+                server = nil
+                loadedModel = nil
                 let tail = errLog.tail()
+                // Порт занят чужим процессом — сигнал попробовать другой порт.
+                if tail.range(of: "bind", options: .caseInsensitive) != nil
+                    || tail.range(of: "address already", options: .caseInsensitive) != nil {
+                    Log.error("LLM: порт \(chosenPort) занят, пробую другой.")
+                    return .portBusy
+                }
                 Log.error("LLM: llama-server упал при запуске. stderr: \(tail)")
-                throw MeetRecError("Не удалось загрузить локальную модель — возможно, не хватило памяти. \(tail)")
+                return .failed(tail)
             }
             if let (_, response) = try? await URLSession.shared.data(from: health),
                (response as? HTTPURLResponse)?.statusCode == 200 {
                 // Сервер готов и будет работать дальше — продолжаем дренировать stderr
                 // (иначе за долгую сессию пайп переполнится), но уже без накопления в память.
                 errPipe.fileHandleForReading.readabilityHandler = { handle in _ = handle.availableData }
-                Log.info(String(format: "LLM: модель загружена за %.1f с", Date().timeIntervalSince(start)))
-                return chosenPort
+                Log.info(String(format: "LLM: модель загружена за %.1f с (порт %d)", Date().timeIntervalSince(start), chosenPort))
+                return .ready(chosenPort)
             }
-            try await Task.sleep(nanoseconds: 500_000_000)
+            try? await Task.sleep(nanoseconds: 500_000_000)
         }
         errPipe.fileHandleForReading.readabilityHandler = nil
-        Log.error("LLM: модель не загрузилась за 180 с. stderr: \(errLog.tail())")
         shutdown()
-        throw MeetRecError("Модель не загрузилась за отведённое время (180 с).")
+        return .failed("модель не загрузилась за отведённое время (180 с)")
+    }
+
+    /// Свободный TCP-порт на 127.0.0.1: просим ОС выдать эфемерный и сразу освобождаем.
+    private static func availablePort() -> Int? {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let bound = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bound == 0 else { return nil }
+        var out = sockaddr_in()
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &out) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(fd, $0, &len)
+            }
+        }
+        guard named == 0 else { return nil }
+        return Int(UInt16(bigEndian: out.sin_port))
     }
 
     /// Гасим сервер после 5 минут простоя.
