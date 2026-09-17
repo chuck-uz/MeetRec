@@ -30,6 +30,13 @@ final class GoogleAuth {
     static let shared = GoogleAuth()
     private let scope = "https://www.googleapis.com/auth/calendar.readonly"
     private let keychainService = "io.github.chuckuz.meetrec.google"
+    /// Прежний идентификатор до смены bundle id: сервис Keychain, под которым
+    /// старые сборки хранили токены. Собирается из частей намеренно.
+    private let legacyKeychainService = LegacyBundleMigration.legacyBundleID + ".google"
+
+    private init() {
+        migrateLegacyKeychainItem()
+    }
 
     var isConnected: Bool {
         loadTokens() != nil && GoogleOAuthConfig.load() != nil
@@ -178,6 +185,32 @@ final class GoogleAuth {
 
     private func deleteTokens() {
         SecItemDelete(baseQuery as CFDictionary)
+    }
+
+    /// Разовый перенос токенов из сервиса прежнего bundle id: если под новым
+    /// сервисом записи нет, читаем старую, сохраняем под новым и старую удаляем.
+    /// macOS может один раз спросить пароль связки ключей — старую запись
+    /// создало приложение с другим идентификатором.
+    private func migrateLegacyKeychainItem() {
+        var existing = baseQuery
+        existing[kSecReturnData as String] = false
+        guard SecItemCopyMatching(existing as CFDictionary, nil) == errSecItemNotFound else { return }
+
+        var legacy = baseQuery
+        legacy[kSecAttrService as String] = legacyKeychainService
+        var query = legacy
+        query[kSecReturnData as String] = true
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let tokens = try? JSONDecoder().decode(OAuthTokens.self, from: data) else { return }
+        do {
+            try saveTokens(tokens)
+            SecItemDelete(legacy as CFDictionary)
+            Log.info("Токены Google перенесены в Keychain под новым bundle id")
+        } catch {
+            Log.error("Не удалось перенести токены Google: \(error)")
+        }
     }
 
     // MARK: - PKCE

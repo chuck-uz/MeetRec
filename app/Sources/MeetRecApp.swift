@@ -13,6 +13,11 @@ struct MeetRecApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var state = AppState()
 
+    init() {
+        // До создания AppState: он читает настройки из UserDefaults.
+        LegacyBundleMigration.migrateDefaultsIfNeeded()
+    }
+
     var body: some Scene {
         Window("MeetRec", id: "main") {
             ContentView()

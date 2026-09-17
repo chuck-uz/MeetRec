@@ -252,6 +252,11 @@ Rationale: for a personal archive (thousands of chunks) brute-force cosine in
 | Google tokens | macOS Keychain (`io.github.chuckuz.meetrec.google`) |
 | Logs | `~/Library/Logs/MeetRec/MeetRec.log` |
 | Settings | `UserDefaults` (toggles, language, output dir, timestamps) |
+
+Builds before the bundle id became `io.github.chuckuz.meetrec` kept settings and
+Google tokens under the previous identifier. `LegacyBundleMigration` copies the
+settings once on first launch, and `GoogleAuth` moves the Keychain item to the new
+service and deletes the old one.
 | Bundled binaries/models | inside `MeetRec.app` (`Contents/MacOS/{whisper-cli,llama-server}`, `Contents/Resources/ggml-silero-*.bin`) |
 
 ---

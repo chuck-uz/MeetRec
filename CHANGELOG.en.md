@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/).
 Russian version: [CHANGELOG.md](CHANGELOG.md).
 
+## [Unreleased]
+
+### Changed
+- **App identifier is now `io.github.chuckuz.meetrec`.** Settings and Google tokens
+  are migrated automatically on first launch (macOS may ask for the keychain password
+  once). macOS treats the rebuilt app as a new app: Microphone and Screen Recording
+  permissions must be granted again.
+
 ## [1.21] — 2026-07-18
 
 ### Added
