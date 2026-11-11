@@ -15,16 +15,33 @@ struct NewRecordingView: View {
                 ErrorBanner(message: message).frame(maxWidth: 520)
             }
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(meetingTitle)
-                        .font(.system(size: 15))
-                        .lineLimit(1)
-                    Text(meetingHint)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(meetingTitle)
+                            .font(.system(size: 15))
+                            .lineLimit(1)
+                        Text(meetingHint)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    if state.isSaving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        PillButton(title: "Записать", icon: "circle.fill", color: Design.destructive) {
+                            state.requestStart()
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
                 }
+                Rectangle().fill(Design.hairline).frame(height: 1)
                 HStack(spacing: 6) {
+                    Text("Для этой встречи")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                        .padding(.trailing, 4)
                     Chip(title: "Субтитры", icon: "captions.bubble", isOn: state.liveCaptions) {
                         state.liveCaptions.toggle()
                     }
@@ -48,19 +65,11 @@ struct NewRecordingView: View {
                         state.captureVideo.toggle()
                     }
                     .help("Записывать экран или окно вместе со звуком")
-                    Spacer(minLength: 8)
-                    if state.isSaving {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        PillButton(title: "Записать", icon: "circle.fill", color: Design.destructive) {
-                            state.requestStart()
-                        }
-                        .keyboardShortcut(.defaultAction)
-                    }
+                    Spacer(minLength: 0)
                 }
             }
             .padding(16)
-            .frame(maxWidth: 620)
+            .frame(maxWidth: 640)
             .background(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
 
             Text(footnote)

@@ -61,8 +61,9 @@ struct PillButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon).font(.system(size: 11, weight: .semibold))
-                Text(title).font(.system(size: 13, weight: .medium))
+                Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
             }
+            .fixedSize()
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .foregroundStyle(color == .primary ? Color(nsColor: .textBackgroundColor) : .white)
