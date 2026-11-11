@@ -64,6 +64,11 @@ struct MenuContent: View {
                 state.pauseResume()
             }
         }
+        if state.captioner != nil {
+            Button("Показать субтитры") {
+                state.showCaptions()
+            }
+        }
         Button("Открыть MeetRec") {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
@@ -97,7 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         let bundleID = Bundle.main.bundleIdentifier ?? "io.github.chuckuz.meetrec"
         let copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        if copies.count > 1 {
+        // Демо субтитров — отдельный проверочный запуск, ему можно рядом с основным.
+        if copies.count > 1, !CommandLine.arguments.contains("--captions-demo") {
             // Уже есть работающий экземпляр — попросим его показать окно и выйдем.
             DistributedNotificationCenter.default().postNotificationName(
                 Self.showNotification, object: nil, userInfo: nil, deliverImmediately: true)

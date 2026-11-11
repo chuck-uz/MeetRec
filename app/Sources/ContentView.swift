@@ -88,6 +88,7 @@ struct ContentView: View {
             videoCard
             transcribeCard
             diarizeCard
+            captionsCard
             if Hardware.supportsChat {
                 summaryCard
             }
@@ -459,6 +460,47 @@ struct ContentView: View {
                 .labelsHidden()
                 .tint(Design.accent)
                 .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private var captionsCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "captions.bubble")
+                .foregroundStyle(state.liveCaptions ? Design.accent : Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Живые субтитры")
+                    .font(.callout.weight(.medium))
+                Text(state.liveCaptions
+                     ? (Hardware.supportsChat ? "окно поверх экрана, перевод иностранной речи" : "окно поверх экрана, без перевода")
+                     : "текст встречи появится только после записи")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if state.captioner != nil {
+                Button {
+                    state.showCaptions()
+                } label: {
+                    Image(systemName: "macwindow")
+                }
+                .buttonStyle(.borderless)
+                .help("Показать окно субтитров")
+                .pointingCursor()
+            }
+            Toggle("", isOn: $state.liveCaptions)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.accent)
+                .pointingCursor()
+                .disabled(state.isRecording)
+                .help(state.isRecording ? "Включается до начала записи" : "")
         }
         .padding(12)
         .background(

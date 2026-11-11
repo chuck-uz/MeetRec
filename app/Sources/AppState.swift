@@ -71,6 +71,11 @@ final class AppState: ObservableObject {
     @Published var autoSummary: Bool {
         didSet { UserDefaults.standard.set(autoSummary, forKey: "autoSummary") }
     }
+    /// Живые субтитры с переводом во время записи (окно поверх экрана).
+    @Published var liveCaptions: Bool {
+        didSet { UserDefaults.standard.set(liveCaptions, forKey: "liveCaptions") }
+    }
+    @Published private(set) var captioner: LiveCaptioner?
     @Published var summarizing: Set<URL> = []
     @Published var launchAtLogin: Bool {
         didSet {
@@ -132,8 +137,14 @@ final class AppState: ObservableObject {
         captureVideo = UserDefaults.standard.bool(forKey: "captureVideo")
         diarize = UserDefaults.standard.bool(forKey: "diarize")
         autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
+        liveCaptions = UserDefaults.standard.bool(forKey: "liveCaptions")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
+        let args = CommandLine.arguments
+        if let flag = args.firstIndex(of: "--captions-demo"), flag + 1 < args.count {
+            let file = URL(fileURLWithPath: args[flag + 1])
+            DispatchQueue.main.async { self.startCaptionsDemo(file) }
+        }
         Self.killStaleModelServers()
         Log.trimIfNeeded()
         Log.info("MeetRec \(UpdateChecker.currentVersion) запущен · RAM \(Hardware.ramGB) ГБ")
@@ -389,6 +400,50 @@ final class AppState: ObservableObject {
     }
 
     /// По умолчанию — язык системы, если он из известного набора, иначе «auto».
+    /// Родной язык для субтитров: язык распознавания, а при «Авто» — язык системы.
+    var nativeLanguage: String {
+        if transcribeLanguage != "auto" { return transcribeLanguage }
+        return Locale.current.language.languageCode?.identifier ?? "ru"
+    }
+
+    /// Проверка субтитров без звонка: `MeetRec --captions-demo запись.wav` проигрывает
+    /// файл как звук собеседника в реальном темпе и сохраняет субтитры рядом с ним.
+    func startCaptionsDemo(_ file: URL) {
+        let live = LiveCaptioner(native: nativeLanguage)
+        captioner = live
+        live.start()
+        CaptionsPanel.shared.show(live)
+        Log.info("Живые субтитры: демо по файлу \(file.lastPathComponent)")
+        Task.detached {
+            do {
+                let audio = try AVAudioFile(forReading: file)
+                let format = audio.processingFormat
+                let chunk = AVAudioFrameCount(format.sampleRate / 2)
+                while audio.framePosition < audio.length {
+                    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunk) else { break }
+                    try audio.read(into: buffer, frameCount: chunk)
+                    let frames = Int(buffer.frameLength)
+                    guard frames > 0, let channels = buffer.floatChannelData else { break }
+                    let count = Int(format.channelCount)
+                    var mono = [Float](repeating: 0, count: frames)
+                    for c in 0..<count {
+                        for i in 0..<frames { mono[i] += channels[c][i] / Float(count) }
+                    }
+                    live.callBuffer.push(samples: mono, rate: format.sampleRate)
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+            } catch {
+                Log.error("Демо субтитров: \(error.localizedDescription)")
+            }
+            try? await Task.sleep(for: .seconds(2))
+            await live.finish(audioURL: file)
+        }
+    }
+
+    func showCaptions() {
+        if let captioner { CaptionsPanel.shared.show(captioner) }
+    }
+
     static func defaultLanguage() -> String {
         let code = Locale.current.language.languageCode?.identifier ?? "auto"
         return languageOptions.contains { $0.code == code } ? code : "auto"
@@ -554,7 +609,19 @@ final class AppState: ObservableObject {
                 engine.onInterrupted = { [weak self] error in
                     Task { @MainActor in self?.handleInterruption(error) }
                 }
+                var captioner: LiveCaptioner?
+                if liveCaptions {
+                    let live = LiveCaptioner(native: nativeLanguage)
+                    engine.onAudio = { buffer, isMic in live.push(buffer, mic: isMic) }
+                    captioner = live
+                }
                 try await engine.start()
+                if let captioner {
+                    await self.captioner?.finish(audioURL: nil)
+                    self.captioner = captioner
+                    captioner.start()
+                    CaptionsPanel.shared.show(captioner)
+                }
                 Log.info("Запись начата · видео=\(captureVideo)")
                 self.engine = engine
                 isRecording = true
@@ -609,6 +676,8 @@ final class AppState: ObservableObject {
             }
             do {
                 let result = try await engine.stop()
+                // Субтитры дораспознают хвост до итоговой расшифровки: два whisper сразу не нужны.
+                await captioner?.finish(audioURL: result.audioURL)
                 lastSaved = result.audioURL
                 errorMessage = nil
                 if autoTranscribe {

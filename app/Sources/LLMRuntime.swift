@@ -94,6 +94,8 @@ actor LLMRuntime {
 
     func generate(
         turns: [ChatTurn],
+        temperature: Double = 0.3,
+        maxTokens: Int = 2048,
         onToken: @escaping @Sendable (String) -> Void,
         onStatus: @escaping @Sendable (String) -> Void
     ) async throws {
@@ -108,9 +110,9 @@ actor LLMRuntime {
         let body: [String: Any] = [
             "messages": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
             "stream": true,
-            "temperature": 0.3,
+            "temperature": temperature,
             "top_p": 0.9,
-            "max_tokens": 2048,
+            "max_tokens": maxTokens,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -144,10 +146,13 @@ actor LLMRuntime {
     /// Полный ответ одним куском (для фоновых задач вроде авто-саммари).
     func complete(
         turns: [ChatTurn],
+        temperature: Double = 0.3,
+        maxTokens: Int = 2048,
         onStatus: @escaping @Sendable (String) -> Void
     ) async throws -> String {
         let buffer = TokenBuffer()
-        try await generate(turns: turns, onToken: { buffer.text += $0 }, onStatus: onStatus)
+        try await generate(turns: turns, temperature: temperature, maxTokens: maxTokens,
+                           onToken: { buffer.text += $0 }, onStatus: onStatus)
         return buffer.text
     }
 
