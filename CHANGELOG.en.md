@@ -7,6 +7,23 @@ Russian version: [CHANGELOG.md](CHANGELOG.md).
 
 ## [Unreleased]
 
+## [1.22] — 2026-11-11
+
+### Added
+- **Live captions with translation while recording (optional).** A "Субтитры" panel over
+  all windows (including full-screen Zoom) shows the conversation a few seconds after each
+  phrase; foreign speech is translated into your language by the local model. The panel
+  never takes focus and is excluded from screen sharing. Modes: both / translation /
+  original, adjustable font size. Captions are saved to `… — субтитры.md` after recording.
+  Without a downloaded AI model, captions run without translation.
+- **"Я" in transcripts.** With diarization on, your own lines are labeled "Я", using the
+  separate microphone track.
+- **Voice recognition (optional).** Name the speakers of a recording in "Мои встречи" and
+  MeetRec fills their names in later meetings, marked "recognized by voice · similarity"
+  with Confirm / Fix buttons. Renaming updates the transcript, summary and search index.
+  Only voice prints (numbers, no audio) are stored, on this Mac only; the "Голоса" sheet
+  renames or forgets them. Off by default.
+
 ### Changed
 - **App identifier is now `io.github.chuckuz.meetrec`.** Settings and Google tokens
   are migrated automatically on first launch (macOS may ask for the keychain password

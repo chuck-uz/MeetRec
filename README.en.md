@@ -29,6 +29,8 @@ Every meeting tool records only itself. MeetRec records **any** meeting — Zoom
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
 - **Speaker diarization (optional)** — transcripts as a dialog, «Спикер 1 / Спикер 2…» ([FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML, fully on-device; ~30 MB models download automatically).
+- **Live captions with translation (optional)** — while recording, a panel over all windows (including full-screen Zoom) shows the conversation a few seconds behind, with foreign speech translated into your language by the local model. It never takes focus and is excluded from screen sharing; captions are saved to `… — субтитры.md`.
+- **Voice recognition (optional)** — your own lines are labeled "Я" from the microphone track; name the other speakers of a recording in "Мои встречи" and their names are filled in automatically in later meetings (marked with a similarity score, easy to fix). Only voice prints are stored — no audio, on your Mac only.
 - **Local AI chat per meeting** (Macs with 16+ GB memory) — summaries, action items, decisions, follow-up drafts or free-form questions over any transcript. Qwen 2.5 via bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) (Metal); the model downloads on first use and unloads after 5 idle minutes. Answers never leave your Mac.
 - **Model picker tuned to your hardware** (gear icon in the header) — Qwen 2.5 **3B / 7B / 14B** with a hint of what suits your Mac by unified memory: "Рекомендуется", "Доступно", "Впритык" or "Не хватит памяти". The recommended model for your Mac is selected by default; the first download (which can be ~9 GB) asks for confirmation. Pre-download a model or delete it to reclaim disk.
 - **Global archive search (local RAG)** (Macs with 16+ GB memory) — ask one question across *all* meetings and get an answer with cited sources. Transcripts are chunked, embedded with [bge-m3](https://huggingface.co/BAAI/bge-m3) and stored in a local SQLite index (FTS5 keyword + vector search, fused via RRF); the same local Qwen writes the answer. Nothing leaves your Mac.
@@ -136,7 +138,7 @@ A minimal CLI variant also lives in the repo: `swiftc -O -parse-as-library MeetR
 
 ## Privacy
 
-MeetRec only goes online to fetch models (Whisper and diarization — from Hugging Face, once) and the recommended-models manifest `models.json` in this repository; with Google Calendar connected, it also calls the Calendar API (read-only). Audio and transcripts never leave your Mac. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
+MeetRec only goes online to fetch models (Whisper and diarization — from Hugging Face, once) and the recommended-models manifest `models.json` in this repository; with Google Calendar connected, it also calls the Calendar API (read-only). Audio, transcripts, captions and voice prints never leave your Mac. A voice print is biometric data: enable voice recognition with participants' consent. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
 
 ## License
 
