@@ -53,6 +53,9 @@ final class RecorderEngine: NSObject, SCStreamDelegate {
     let finalURL: URL
     let videoFinalURL: URL?
     var onInterrupted: ((Error) -> Void)?
+    /// Копия звука для живых субтитров: (буфер, это микрофон). Вызывается на очереди
+    /// захвата, без пауз — время субтитров совпадает со временем записи.
+    var onAudio: ((CMSampleBuffer, Bool) -> Void)?
 
     init(outputDir: URL, title: String? = nil, captureVideo: Bool = false,
          videoSource: VideoSource = .wholeScreen) throws {
@@ -360,6 +363,9 @@ final class RecorderEngine: NSObject, SCStreamDelegate {
         if !sessionStarted {
             writer.startSession(atSourceTime: pts) // смещение здесь ещё нулевое
             sessionStarted = true
+        }
+        if let onAudio, input === systemInput || input === micInput {
+            onAudio(sampleBuffer, input === micInput)
         }
 
         let toWrite: CMSampleBuffer
