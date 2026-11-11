@@ -7,6 +7,15 @@ Russian version: [CHANGELOG.md](CHANGELOG.md).
 
 ## [Unreleased]
 
+## [1.22.1] — 2026-11-11
+
+### Fixed
+- **Whisper hallucinations in the final transcript.** The live-caption filters now clean
+  transcripts too: video credits ("Субтитры сделал…", "Продолжение следует"), "[Music]",
+  looping repeated phrases. The filter is conservative: "Спасибо за внимание", a lone
+  "Thank you", short identical replies in a row, and text in the recording's own language
+  (including Japanese, Chinese, Arabic) are kept.
+
 ## [1.22] — 2026-11-11
 
 ### Added
