@@ -76,6 +76,12 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(liveCaptions, forKey: "liveCaptions") }
     }
     @Published private(set) var captioner: LiveCaptioner?
+    /// Узнавать спикеров по голосу между встречами (библиотека голосов).
+    @Published var voiceLibrary: Bool {
+        didSet { UserDefaults.standard.set(voiceLibrary, forKey: "voiceLibrary") }
+    }
+    /// Тик для обновления списков говорящих/голосов после переименований.
+    @Published private(set) var speakersRevision = 0
     @Published var summarizing: Set<URL> = []
     @Published var launchAtLogin: Bool {
         didSet {
@@ -138,12 +144,22 @@ final class AppState: ObservableObject {
         diarize = UserDefaults.standard.bool(forKey: "diarize")
         autoSummary = UserDefaults.standard.bool(forKey: "autoSummary")
         liveCaptions = UserDefaults.standard.bool(forKey: "liveCaptions")
+        voiceLibrary = UserDefaults.standard.bool(forKey: "voiceLibrary")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         Self.shared = self
         let args = CommandLine.arguments
         if let flag = args.firstIndex(of: "--captions-demo"), flag + 1 < args.count {
             let file = URL(fileURLWithPath: args[flag + 1])
             DispatchQueue.main.async { self.startCaptionsDemo(file) }
+        }
+        if let flag = args.firstIndex(of: "--voice-calibrate"), flag + 2 < args.count {
+            let folder = URL(fileURLWithPath: args[flag + 1])
+            let report = URL(fileURLWithPath: args[flag + 2])
+            let limit = flag + 3 < args.count ? Int(args[flag + 3]) ?? 8 : 8
+            Task.detached {
+                await VoiceCalibration.run(folder: folder, report: report, limit: limit)
+                await MainActor.run { NSApp.terminate(nil) }
+            }
         }
         Self.killStaleModelServers()
         Log.trimIfNeeded()
@@ -681,7 +697,9 @@ final class AppState: ObservableObject {
                 lastSaved = result.audioURL
                 errorMessage = nil
                 if autoTranscribe {
-                    transcribe(result.audioURL)
+                    transcribe(result.audioURL, tracks: result.tracks)
+                } else {
+                    for url in result.tracks.values { try? FileManager.default.removeItem(at: url) }
                 }
             } catch {
                 errorMessage = "Ошибка при сохранении: \(error.localizedDescription)"
@@ -696,16 +714,22 @@ final class AppState: ObservableObject {
         FileManager.default.fileExists(atPath: Transcriber.transcriptURL(for: audio).path)
     }
 
-    func transcribe(_ audio: URL) {
-        guard transcribeProgress[audio] == nil, !hasTranscript(audio) else { return }
+    func transcribe(_ audio: URL, tracks: [String: URL] = [:]) {
+        guard transcribeProgress[audio] == nil, !hasTranscript(audio) else {
+            for url in tracks.values { try? FileManager.default.removeItem(at: url) }
+            return
+        }
         transcribeProgress[audio] = "в очереди…"
         let header = meetingHeaders[audio]
             ?? meetingHeaders[audio.deletingPathExtension().appendingPathExtension("m4a")]
         let diarize = self.diarize
+        let voices = self.voiceLibrary && diarize
         Task {
             do {
-                Log.info("Транскрибация начата: \(audio.lastPathComponent) · диаризация=\(diarize)")
-                let transcript = try await Transcriber.shared.transcribe(audio: audio, header: header, diarize: diarize) { [weak self] status in
+                Log.info("Транскрибация начата: \(audio.lastPathComponent) · диаризация=\(diarize) · голоса=\(voices) · дорожек \(tracks.count)")
+                let transcript = try await Transcriber.shared.transcribe(
+                    audio: audio, header: header, diarize: diarize, tracks: tracks, voices: voices
+                ) { [weak self] status in
                     Task { @MainActor in self?.transcribeProgress[audio] = status }
                 }
                 Log.info("Транскрибация готова: \(transcript.lastPathComponent)")
@@ -722,6 +746,122 @@ final class AppState: ObservableObject {
                 errorMessage = "Транскрибация: \(error.localizedDescription)"
                 transcribeProgress[audio] = nil
             }
+        }
+    }
+
+    // MARK: - Говорящие и голоса
+
+    struct SpeakerInfo: Identifiable {
+        let label: String
+        let sample: String
+        let turns: Int
+        var recognized: VoiceMatch?
+        var id: String { label }
+    }
+
+    /// Говорящие из транскрипта-диалога: метка, пример реплики, число реплик.
+    func speakers(in audio: URL) async -> [SpeakerInfo] {
+        guard let text = try? String(contentsOf: Transcriber.transcriptURL(for: audio), encoding: .utf8) else { return [] }
+        var order: [String] = []
+        var samples: [String: String] = [:]
+        var turns: [String: Int] = [:]
+        let pattern = try! NSRegularExpression(pattern: #"^\*\*(.+?) \[[0-9:]+\]:\*\* (.*)$"#, options: .anchorsMatchLines)
+        for match in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let labelRange = Range(match.range(at: 1), in: text),
+                  let lineRange = Range(match.range(at: 2), in: text) else { continue }
+            let label = String(text[labelRange]), line = String(text[lineRange])
+            if turns[label] == nil { order.append(label) }
+            turns[label, default: 0] += 1
+            if line.count > (samples[label]?.count ?? 0), line.count >= 20 || samples[label] == nil {
+                samples[label] = line
+            }
+        }
+        let record = await VoiceLibrary.shared.meeting(audio.deletingPathExtension().lastPathComponent)
+        return order.map { label in
+            var sample = samples[label] ?? ""
+            if sample.count > 160 { sample = String(sample.prefix(160)) + "…" }
+            return SpeakerInfo(label: label, sample: sample, turns: turns[label] ?? 0,
+                               recognized: record?.speakers[label]?.recognized)
+        }
+    }
+
+    /// Переименовывает говорящего в транскрипте и итогах, запоминает голос под новым именем.
+    func renameSpeaker(in audio: URL, from old: String, to newName: String) {
+        let name = String(newName.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(60))
+        guard !name.isEmpty, name != old else { return }
+        let transcript = Transcriber.transcriptURL(for: audio)
+        do {
+            let text = try String(contentsOf: transcript, encoding: .utf8)
+            try text.replacingOccurrences(of: "**\(old) [", with: "**\(name) [")
+                .write(to: transcript, atomically: true, encoding: .utf8)
+            let summary = Summarizer.summaryURL(forAudio: audio)
+            if let summaryText = try? String(contentsOf: summary, encoding: .utf8) {
+                let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: old) + #"(?![\p{L}\p{N}])"#
+                let regex = try NSRegularExpression(pattern: pattern)
+                let replaced = regex.stringByReplacingMatches(
+                    in: summaryText, range: NSRange(summaryText.startIndex..., in: summaryText),
+                    withTemplate: NSRegularExpression.escapedTemplate(for: name))
+                try replaced.write(to: summary, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            errorMessage = "Не удалось переименовать говорящего: \(error.localizedDescription)"
+            return
+        }
+        Log.info("Говорящий переименован в \(audio.lastPathComponent)")
+        let meeting = audio.deletingPathExtension().lastPathComponent
+        let learn = voiceLibrary
+        Task {
+            if var record = await VoiceLibrary.shared.meeting(meeting) {
+                var speaker = record.speakers.removeValue(forKey: old) ?? MeetingVoices.Speaker()
+                speaker.recognized = nil // имя подтверждено человеком
+                if let existing = record.speakers[name], let print = existing.print,
+                   print.sec > (speaker.print?.sec ?? 0) {
+                    speaker.print = print
+                }
+                record.speakers[name] = speaker
+                await VoiceLibrary.shared.saveMeeting(meeting, record)
+                if learn {
+                    await VoiceLibrary.shared.remember(meeting: meeting, prints: record.speakers.compactMapValues(\.print))
+                }
+            }
+            if Hardware.supportsChat {
+                try? await ArchiveIndexer.indexTranscript(at: transcript)
+                await EmbeddingService.shared.shutdown()
+            }
+            speakersRevision += 1
+        }
+        speakersRevision += 1
+    }
+
+    /// Убирает отметку «узнан по голосу», оставляя имя (пользователь подтвердил).
+    func confirmSpeaker(in audio: URL, _ label: String) {
+        let meeting = audio.deletingPathExtension().lastPathComponent
+        Task {
+            guard var record = await VoiceLibrary.shared.meeting(meeting) else { return }
+            record.speakers[label]?.recognized = nil
+            await VoiceLibrary.shared.saveMeeting(meeting, record)
+            speakersRevision += 1
+        }
+    }
+
+    func forgetVoice(_ name: String) {
+        Task {
+            await VoiceLibrary.shared.forget(name)
+            speakersRevision += 1
+        }
+    }
+
+    func renameVoice(_ old: String, to new: String) {
+        Task {
+            await VoiceLibrary.shared.rename(old, to: new)
+            speakersRevision += 1
+        }
+    }
+
+    func forgetAllVoices() {
+        Task {
+            await VoiceLibrary.shared.forgetAll()
+            speakersRevision += 1
         }
     }
 

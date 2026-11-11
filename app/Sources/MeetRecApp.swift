@@ -102,8 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         let bundleID = Bundle.main.bundleIdentifier ?? "io.github.chuckuz.meetrec"
         let copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        // Демо субтитров — отдельный проверочный запуск, ему можно рядом с основным.
-        if copies.count > 1, !CommandLine.arguments.contains("--captions-demo") {
+        // Проверочные запуски (демо субтитров, калибровка голосов) — рядом с основным.
+        let checkRun = CommandLine.arguments.contains("--captions-demo")
+            || CommandLine.arguments.contains("--voice-calibrate")
+        if copies.count > 1, !checkRun {
             // Уже есть работающий экземпляр — попросим его показать окно и выйдем.
             DistributedNotificationCenter.default().postNotificationName(
                 Self.showNotification, object: nil, userInfo: nil, deliverImmediately: true)

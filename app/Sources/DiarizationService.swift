@@ -38,6 +38,12 @@ final class DiarizationService {
             }
     }
 
+    /// Отпечаток голоса куска звука (16 кГц моно, до 10 с): 256 чисел, нормированный.
+    func embedder(progress: @escaping @Sendable (String) -> Void) async throws -> ([Float]) throws -> [Float] {
+        let manager = try await prepared(progress: progress)
+        return { try manager.extractSpeakerEmbedding(from: $0) }
+    }
+
     private func prepared(progress: @escaping @Sendable (String) -> Void) async throws -> DiarizerManager {
         if let manager { return manager }
         progress("модели диаризации…")
@@ -48,7 +54,7 @@ final class DiarizationService {
         return created
     }
 
-    private func loadSamples(wav: URL) throws -> [Float] {
+    func loadSamples(wav: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: wav)
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,

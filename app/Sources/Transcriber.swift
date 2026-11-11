@@ -70,8 +70,10 @@ final class Transcriber {
 
     func transcribe(
         audio: URL, header: String? = nil, diarize: Bool = false,
+        tracks: [String: URL] = [:], voices: Bool = false,
         progress: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
+        defer { for url in tracks.values { try? FileManager.default.removeItem(at: url) } }
         guard let cli = Self.whisperCLI() else {
             throw MeetRecError("Не найден whisper-cli. Переустановите MeetRec или выполните: brew install whisper-cpp")
         }
@@ -127,6 +129,11 @@ final class Transcriber {
             } catch {
                 // Диаризация — необязательное улучшение: при сбое сохраняем обычный транскрипт.
                 speakers = []
+            }
+            if !speakers.isEmpty {
+                speakers = await nameSpeakers(
+                    speakers, meeting: audio.deletingPathExtension().lastPathComponent,
+                    mixed: wav, tracks: tracks, voices: voices, progress: progress)
             }
         }
 
@@ -253,6 +260,70 @@ final class Transcriber {
                 errPipe.fileHandleForReading.readabilityHandler = nil
                 cont.resume(returning: finished.terminationStatus)
             }
+        }
+    }
+
+    // MARK: - Имена говорящих
+
+    /// «Я» по дорожке микрофона и имена из библиотеки голосов. Любой сбой здесь не
+    /// мешает транскрипту: возвращаются исходные метки.
+    private func nameSpeakers(
+        _ speakers: [DiarizationService.SpeakerSegment], meeting: String,
+        mixed: URL, tracks: [String: URL], voices: Bool,
+        progress: @escaping @Sendable (String) -> Void
+    ) async -> [DiarizationService.SpeakerSegment] {
+        let service = DiarizationService.shared
+        var audio: [String: [Float]] = [:]
+        for (name, url) in tracks {
+            if let samples = try? service.loadSamples(wav: url) { audio[name] = samples }
+        }
+        if audio.count < 2 { audio = [:] } // нужна пара «микрофон + звонок»
+        var lines = speakers.map { VoiceLine(start: $0.start, end: $0.end, speaker: $0.speaker) }
+        var renames: [String: String] = [:]
+
+        // «Я»: метка, чьи реплики громче всего на микрофоне (больше всех секунд речи).
+        if audio["mic"] != nil, audio["call"] != nil {
+            let homes = VoicePrints.homeTracks(tracks: audio, lines: lines)
+            let mine = homes.filter { $0.value == "mic" }.map(\.key)
+            let talk = Dictionary(grouping: lines, by: \.speaker).mapValues { $0.reduce(0) { $0 + $1.end - $1.start } }
+            if let me = mine.max(by: { (talk[$0] ?? 0) < (talk[$1] ?? 0) }) {
+                renames[me] = LiveCaptioner.meSpeaker
+            }
+        }
+        for i in lines.indices { lines[i].speaker = renames[lines[i].speaker] ?? lines[i].speaker }
+
+        if voices {
+            do {
+                progress("узнаю голоса…")
+                if audio.isEmpty { audio = ["mix": try service.loadSamples(wav: mixed)] }
+                let embed = try await service.embedder(progress: progress)
+                var prints = VoicePrints.compute(tracks: audio, lines: lines, embed: embed)
+                let taken = Set(lines.map(\.speaker).filter { !VoicePrints.isGeneric($0) })
+                let found = await VoiceLibrary.shared.match(prints, taken: taken)
+                var record = MeetingVoices()
+                for (label, match) in found {
+                    prints[match.name] = prints.removeValue(forKey: label)
+                    record.speakers[match.name] = MeetingVoices.Speaker(recognized: match)
+                }
+                // Итоговое имя каждой исходной метки диаризации: после «Я» и узнавания.
+                for original in Set(speakers.map(\.speaker)) {
+                    let current = renames[original] ?? original
+                    if let match = found[current] { renames[original] = match.name }
+                }
+                for (label, print) in prints { record.speakers[label, default: .init()].print = print }
+                await VoiceLibrary.shared.remember(meeting: meeting, prints: prints)
+                await VoiceLibrary.shared.saveMeeting(meeting, record)
+                if !found.isEmpty {
+                    Log.info("Голоса: узнано \(found.count) · " + found.values.map { String(format: "%.2f", $0.score) }.joined(separator: ", "))
+                }
+            } catch {
+                Log.error("Голоса: \(error.localizedDescription)")
+            }
+        }
+
+        guard !renames.isEmpty else { return speakers }
+        return speakers.map {
+            DiarizationService.SpeakerSegment(speaker: renames[$0.speaker] ?? $0.speaker, start: $0.start, end: $0.end)
         }
     }
 
