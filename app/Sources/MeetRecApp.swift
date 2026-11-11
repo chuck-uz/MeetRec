@@ -58,8 +58,8 @@ struct MenuContent: View {
                 state.pauseResume()
             }
         }
-        if state.captioner != nil {
-            Button("Показать субтитры") {
+        if state.captioner != nil, state.isRecording {
+            Button("Субтитры поверх экрана") {
                 state.showCaptions()
             }
         }

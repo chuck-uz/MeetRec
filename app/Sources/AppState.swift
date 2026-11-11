@@ -440,7 +440,7 @@ final class AppState: ObservableObject {
         let live = LiveCaptioner(native: nativeLanguage)
         captioner = live
         live.start()
-        CaptionsPanel.shared.show(live)
+        route = .live
         Log.info("Живые субтитры: демо по файлу \(file.lastPathComponent)")
         Task.detached {
             do {
@@ -648,7 +648,9 @@ final class AppState: ObservableObject {
                     await self.captioner?.finish(audioURL: nil)
                     self.captioner = captioner
                     captioner.start()
-                    CaptionsPanel.shared.show(captioner)
+                    // Субтитры идут в главном окне. Окно поверх экрана — только по кнопке;
+                    // если оно осталось открытым с прошлой встречи, переключаем его на новую.
+                    if CaptionsPanel.shared.isVisible { CaptionsPanel.shared.show(captioner) }
                 }
                 Log.info("Запись начата · видео=\(captureVideo)")
                 self.engine = engine
@@ -706,6 +708,7 @@ final class AppState: ObservableObject {
                 let result = try await engine.stop()
                 // Субтитры дораспознают хвост до итоговой расшифровки: два whisper сразу не нужны.
                 await captioner?.finish(audioURL: result.audioURL)
+                CaptionsPanel.shared.hide()
                 lastSaved = result.audioURL
                 errorMessage = nil
                 if autoTranscribe {
