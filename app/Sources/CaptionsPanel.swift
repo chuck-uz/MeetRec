@@ -46,7 +46,7 @@ final class CaptionsPanel {
     }
 }
 
-private enum CaptionsMode: String, CaseIterable {
+enum CaptionsMode: String, CaseIterable {
     case both = "оба", translation = "перевод", original = "оригинал"
 
     var help: String {

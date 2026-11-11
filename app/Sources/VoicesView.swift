@@ -1,106 +1,75 @@
 // Говорящие встречи (переименование, «узнан по голосу») и управление библиотекой голосов.
 import SwiftUI
 
-/// Раздел «Говорящие» у записи в «Мои встречи».
-struct SpeakersSection: View {
+/// Список говорящих встречи: назвать, исправить, подтвердить имя, данное по голосу.
+struct SpeakersList: View {
     @EnvironmentObject var state: AppState
     let audio: URL
+    let speakers: [AppState.SpeakerInfo]
 
-    @State private var speakers: [AppState.SpeakerInfo] = []
-    @State private var expanded = false
     @State private var editing: String?
     @State private var draft = ""
 
     var body: some View {
-        Group {
-            if speakers.count > 0 {
-                DisclosureGroup(isExpanded: $expanded) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(speakers) { row($0) }
-                        if !state.voiceLibrary {
-                            Text("Имена сохранятся в транскрипте. Чтобы MeetRec узнавал этих людей в следующих встречах, включите «Узнавать по голосу» в главном окне.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.top, 6)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Говорящие")
-                            .font(.callout.weight(.medium))
-                        Text(speakers.map(\.label).joined(separator: ", "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        if speakers.contains(where: { $0.recognized != nil }) {
-                            Image(systemName: "waveform.badge.checkmark")
-                                .foregroundStyle(Design.accent)
-                                .help("Есть имена, данные по голосу — проверьте их")
-                        }
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                Divider()
+        VStack(alignment: .leading, spacing: 14) {
+            if speakers.isEmpty {
+                Text("В расшифровке нет разметки по говорящим. Включите «Говорящие» перед записью — реплики будут подписаны.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(speakers) { row($0) }
+            if !speakers.isEmpty, !state.voiceLibrary {
+                Text("Имена сохранятся в расшифровке. Чтобы MeetRec узнавал этих людей в следующих встречах, включите «Голоса» перед записью.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .task(id: "\(audio.path)#\(state.speakersRevision)#\(state.transcribeProgress[audio] ?? "")") {
-            speakers = await state.speakers(in: audio)
-            if speakers.contains(where: { $0.recognized != nil }) { expanded = true }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private func row(_ speaker: AppState.SpeakerInfo) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                if editing == speaker.label {
-                    HStack(spacing: 6) {
-                        TextField("Имя", text: $draft)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 220)
-                            .onSubmit { commit(speaker.label) }
-                        Button("Сохранить") { commit(speaker.label) }
-                            .keyboardShortcut(.defaultAction)
-                        Button("Отмена") { editing = nil }
-                    }
-                    .controlSize(.small)
-                } else {
-                    HStack(spacing: 6) {
-                        Text(speaker.label)
-                            .font(.callout.weight(.medium))
-                        Text("\(speaker.turns) репл.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let match = speaker.recognized {
-                            Text("узнан по голосу · сходство \(String(format: "%.2f", match.score))")
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(Design.accent.opacity(0.15)))
-                                .foregroundStyle(Design.accent)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            if editing == speaker.label {
+                TextField("Имя", text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { commit(speaker.label) }
+                HStack(spacing: 6) {
+                    Button("Сохранить") { commit(speaker.label) }
+                        .keyboardShortcut(.defaultAction)
+                    Button("Отмена") { editing = nil }
                 }
-                if !speaker.sample.isEmpty {
-                    Text("«\(speaker.sample)»")
+            } else {
+                HStack(spacing: 6) {
+                    Text(speaker.label)
+                        .font(.system(size: 13, weight: .medium))
+                    Text("\(speaker.turns) репл.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    if speaker.recognized != nil {
+                        Button("Верно") { state.confirmSpeaker(in: audio, speaker.label) }
+                            .help("Имя подтверждено — убрать отметку")
+                    }
+                    Button(speaker.recognized != nil ? "Исправить" : "Назвать") {
+                        draft = VoicePrints.isGeneric(speaker.label) ? "" : speaker.label
+                        editing = speaker.label
+                    }
+                }
+                if let match = speaker.recognized {
+                    Text("узнан по голосу · сходство \(String(format: "%.2f", match.score))")
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Design.primary.opacity(0.12)))
+                        .foregroundStyle(Design.primary)
                 }
             }
-            Spacer()
-            if editing != speaker.label {
-                if speaker.recognized != nil {
-                    Button("Верно") { state.confirmSpeaker(in: audio, speaker.label) }
-                        .help("Имя подтверждено — убрать отметку")
-                        .pointingCursor()
-                }
-                Button(speaker.recognized != nil ? "Исправить" : "Назвать") {
-                    draft = VoicePrints.isGeneric(speaker.label) ? "" : speaker.label
-                    editing = speaker.label
-                }
-                .pointingCursor()
+            if !speaker.sample.isEmpty {
+                Text("«\(speaker.sample)»")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
             }
         }
         .controlSize(.small)
@@ -118,6 +87,8 @@ struct SpeakersSection: View {
 struct VoicesView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
+    /// Страница в главном окне (а не лист): без кнопки «Готово» и фиксированной ширины.
+    var embedded = false
 
     @State private var voices: [VoiceLibrary.Voice] = []
     @State private var editing: String?
@@ -127,14 +98,14 @@ struct VoicesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Голоса")
-                .font(.title3.weight(.semibold))
+                .font(.system(size: 22, design: .serif))
             Text("Отпечатки голосов людей, которых вы назвали во встречах. Хранятся только на этом Mac, без звука. Отпечаток голоса — биометрические данные: храните их с согласия участников.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if voices.isEmpty {
-                Text("Пока пусто. Назовите говорящих у записи в «Мои встречи» — голоса запомнятся.")
+                Text("Пока пусто. Откройте встречу, назовите говорящих на вкладке «Говорящие» — голоса запомнятся.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 80)
@@ -163,7 +134,7 @@ struct VoicesView: View {
                     }
                     .controlSize(.small)
                 }
-                .frame(minHeight: 160)
+                .frame(minHeight: embedded ? 320 : 160)
             }
 
             HStack {
@@ -171,12 +142,15 @@ struct VoicesView: View {
                     Button("Забыть все голоса…", role: .destructive) { confirmForgetAll = true }
                 }
                 Spacer()
-                Button("Готово") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+                if !embedded {
+                    Button("Готово") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
-        .padding(18)
-        .frame(width: 460)
+        .padding(embedded ? 0 : 18)
+        .frame(width: embedded ? nil : 460)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: state.speakersRevision) {
             voices = await VoiceLibrary.shared.voices()
         }

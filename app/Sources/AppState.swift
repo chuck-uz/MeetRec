@@ -17,12 +17,6 @@ extension Notification.Name {
     static let meetrecStartRecording = Notification.Name("io.github.chuckuz.meetrec.startRecording")
 }
 
-/// Что показать в окне «Мои встречи»: поиск по архиву или чат по конкретной записи.
-enum MeetingsTarget: Hashable {
-    case search
-    case recording(URL)  // аудиофайл записи
-}
-
 @MainActor
 final class AppState: ObservableObject {
     static private(set) weak var shared: AppState?
@@ -102,8 +96,8 @@ final class AppState: ObservableObject {
     }
     private var suppressLoginItemUpdate = false
     @Published var recordingSizeText: String?
-    @Published var chatTranscript: URL?
-    @Published var meetingsTarget: MeetingsTarget?
+    /// Экран в рабочей области главного окна.
+    @Published var route: AppRoute = .new
     @Published var availableUpdate: AppRelease?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
@@ -151,6 +145,24 @@ final class AppState: ObservableObject {
         if let flag = args.firstIndex(of: "--captions-demo"), flag + 1 < args.count {
             let file = URL(fileURLWithPath: args[flag + 1])
             DispatchQueue.main.async { self.startCaptionsDemo(file) }
+        }
+        // Проверка интерфейса: `MeetRec --preview new|live|meeting|search|voices|settings`
+        // открывает нужный экран во второй копии рядом с основной.
+        if let flag = args.firstIndex(of: "--preview"), flag + 1 < args.count {
+            switch args[flag + 1] {
+            case "live": route = .live
+            case "search": route = .search
+            case "voices": route = .voices
+            case "settings": route = .settings
+            case "meeting":
+                let long = allRecordings.first { audio in
+                    hasSummary(audio) && ((try? Data(contentsOf: Transcriber.transcriptURL(for: audio)).count) ?? 0) > 4000
+                }
+                if let audio = long ?? allRecordings.first(where: { hasTranscript($0) }) {
+                    route = .meeting(audio)
+                }
+            default: route = .new
+            }
         }
         if let flag = args.firstIndex(of: "--voice-calibrate"), flag + 2 < args.count {
             let folder = URL(fileURLWithPath: args[flag + 1])

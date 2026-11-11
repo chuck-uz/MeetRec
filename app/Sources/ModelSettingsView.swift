@@ -1,10 +1,11 @@
 // Экран выбора локальной LLM с подсветкой пригодности под железо.
-// Открывается «шестерёнкой» в шапке главного окна.
+// Встроен в «Настройки».
 import SwiftUI
 
 struct ModelSettingsView: View {
     @EnvironmentObject var state: AppState
-    var onBack: () -> Void
+    /// nil — экран встроен в настройки, кнопка «назад» не нужна.
+    var onBack: (() -> Void)?
 
     private var recommendedID: String { LLMCatalog.recommended().id }
 
@@ -29,16 +30,18 @@ struct ModelSettingsView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Design.primary)
+            if let onBack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Design.primary)
+                }
+                .buttonStyle(.plain)
+                .pointingCursor()
+                .help("Назад")
+                Text("Модель ИИ")
+                    .font(.headline)
             }
-            .buttonStyle(.plain)
-            .pointingCursor()
-            .help("Назад")
-            Text("Модель ИИ")
-                .font(.headline)
             Spacer()
         }
     }
