@@ -239,6 +239,60 @@ Rationale: for a personal archive (thousands of chunks) brute-force cosine in
 - **`Downloader`** streams large files with progress and atomic move-on-complete;
   shared by Whisper/LLM/embedding model downloads.
 
+### 5.9 Live captions — `LiveCaptions`, `LiveAudio`, `LiveFilters`, `CaptionsPanel`
+
+Ported from [meetvoice-kit](https://github.com/igrbtn/meetvoice-kit) (Python) to Swift.
+
+- `RecorderEngine.onAudio` hands a copy of every system/mic buffer (after the pause check, so
+  caption time = recording time) to `LiveTrackBuffer`, which downmixes and resamples to 16 kHz.
+- Once a second each track is cut into 6–20 s windows at the quietest 100 ms after 3 s
+  (`LiveDSP.quietCut`), so words are not split. Silent windows are skipped.
+- Mic windows: the call heard through the speakers is cut out by correlating log-energy
+  envelopes of the two tracks (`crosstalkLag`, `dropCrosstalk`); on the mic only the native
+  language and English survive (the rest is echo garbage).
+- Each window goes to the bundled `whisper-cli` (`-l auto -mc 0 -nf`, VAD). With the model in
+  the page cache this is ~1.7 s per 9 s window, so no resident whisper server is needed.
+- `CaptionFilters` drop Whisper's subtitle-credit hallucinations, decoder loops, far scripts.
+- Lines whose language ≠ native are translated by `LLMRuntime` on a separate queue (4 previous
+  lines as context, ASR-aware prompt), only if the LLM is already downloaded.
+- `CaptionsPanel`: non-activating `NSPanel`, `.statusBar` level, all Spaces, `sharingType = .none`.
+- On stop the tail is recognized, translations get up to 10 s, and `<name> — субтитры.md` is
+  written next to the recording (excluded from the archive index).
+- `MeetRec --captions-demo file.wav` replays a file as the call track in real time.
+
+### 5.10 Voice library — `VoiceLibrary`, `VoicesView`, `VoiceCalibration`
+
+Ported from meetvoice-kit. People named in one meeting are recognized by voice in later ones.
+
+- **Tracks.** Before the mixdown `RecorderEngine` exports the call and mic tracks to temporary
+  16 kHz WAVs (`RecordingResult.tracks`); `Transcriber` deletes them after use.
+- **«Я».** After diarization the label whose lines stand out on the mic track (relative to each
+  track's own speech level) and talks most becomes «Я».
+- **Prints.** WeSpeaker embeddings from FluidAudio (`extractSpeakerEmbedding`, 256-d), weighted
+  average over ≤ 12 longest *clean* lines (≥ 1.5 s; own track within 10 dB of its speech level,
+  other tracks ≥ 12 dB below theirs), ≥ 8 s of speech. Lines > 10 s are cut to the middle.
+- **Match.** Generic labels (`Спикер N`, `Я`, …) get a library name when cosine ≥ `match`
+  and ≥ `margin` above the runner-up; each name goes to one label.
+- **Storage.** `~/Library/Application Support/MeetRec/voices/voices.json` — prints per name per
+  meeting (a meeting's contribution is replaced as a whole); `voices/meetings/<id>.json` — the
+  meeting's prints and «recognized by voice» marks, so renaming needs no audio. No audio is kept.
+- **UI.** «Говорящие» in Мои встречи: rename (rewrites transcript + summary, reindexes, learns
+  the voice), «recognized · similarity» badge with confirm/fix. «Голоса» sheet: rename, forget,
+  forget all. Off by default; enabling shows a biometrics consent alert.
+
+Calibration (`MeetRec --voice-calibrate <folder> <report> [n]`) on 8 existing recordings
+(mixed track only, 8–23 min, diarized fresh):
+
+| Pair | Cosine |
+|---|---|
+| same label, odd vs even lines of one meeting | median 0.92, min 0.64 |
+| different labels of one meeting | median 0.52, 90% 0.84 (diarization splits one person too) |
+| labels of different meetings | median 0.24, 90% 0.42; 7 of 186 pairs ≥ 0.5, max 0.83 |
+
+Same-person-across-meetings could not be measured on old mixed recordings (no names), so
+`match` stays at meetvoice's 0.62 — above the bulk of cross-meeting pairs — with `margin`
+0.08. Re-run the calibration on named two-track meetings and adjust.
+
 ---
 
 ## 6. Data & storage
@@ -248,6 +302,8 @@ Rationale: for a personal archive (thousands of chunks) brute-force cosine in
 | Recordings, transcripts, summaries | `~/Documents/Записи встреч/` (or Google Drive folder, auto-detected; user-configurable) |
 | ML models (Whisper, Qwen, bge-m3) | `~/Library/Application Support/MeetRec/models/` |
 | Search index | `~/Library/Application Support/MeetRec/archive.sqlite` |
+| Voice prints (no audio) | `~/Library/Application Support/MeetRec/voices/` |
+| Live captions | `<name> — субтитры.md` next to the recording |
 | Google OAuth client config | `~/Library/Application Support/MeetRec/google_oauth.json` (local only) |
 | Google tokens | macOS Keychain (`io.github.chuckuz.meetrec.google`) |
 | Logs | `~/Library/Logs/MeetRec/MeetRec.log` |

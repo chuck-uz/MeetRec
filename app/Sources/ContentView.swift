@@ -17,6 +17,8 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var pulsing = false
     @State private var screen: Screen = .main
+    @State private var voicesVisible = false
+    @State private var voiceConsentVisible = false
 
     private enum Screen { case main, model }
 
@@ -40,6 +42,18 @@ struct ContentView: View {
         })
         .onAppear {
             WindowBridge.shared.open = { openWindow(id: "main") }
+        }
+        .sheet(isPresented: $voicesVisible) {
+            VoicesView().environmentObject(state)
+        }
+        .alert("Узнавать людей по голосу?", isPresented: $voiceConsentVisible) {
+            Button("Включить") {
+                state.voiceLibrary = true
+                state.diarize = true
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("MeetRec запомнит отпечатки голосов людей, которых вы назовёте во встречах, и будет подставлять их имена в следующих. Отпечаток голоса — биометрические персональные данные: он хранится только на этом Mac, без звука, и его можно забыть в любой момент. Предупреждайте участников, как и о самой записи.")
         }
         .sheet(isPresented: $state.sourceSheetVisible) {
             SourcePickerSheet()
@@ -89,6 +103,7 @@ struct ContentView: View {
             transcribeCard
             diarizeCard
             captionsCard
+            voicesCard
             if Hardware.supportsChat {
                 summaryCard
             }
@@ -455,6 +470,45 @@ struct ContentView: View {
             }
             Spacer()
             Toggle("", isOn: $state.diarize)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+                .tint(Design.accent)
+                .pointingCursor()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: Design.corner)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private var voicesCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.wave.2")
+                .foregroundStyle(state.voiceLibrary ? Design.accent : Design.primary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Узнавать по голосу")
+                    .font(.callout.weight(.medium))
+                Text(state.voiceLibrary ? "имена из прошлых встреч вместо «Спикер N»" : "говорящие останутся «Спикер N»")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                voicesVisible = true
+            } label: {
+                Image(systemName: "person.crop.rectangle.stack")
+            }
+            .buttonStyle(.borderless)
+            .help("Запомненные голоса")
+            .pointingCursor()
+            Toggle("", isOn: Binding(
+                get: { state.voiceLibrary },
+                set: { on in
+                    if on { voiceConsentVisible = true } else { state.voiceLibrary = false }
+                }))
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()

@@ -16,6 +16,9 @@ struct MeetRecError: LocalizedError {
 struct RecordingResult {
     let audioURL: URL
     let videoURL: URL?
+    /// Раздельные дорожки 16 кГц моно во временной папке: "mic" и "call".
+    /// Нужны для метки «Я» и отпечатков голосов; удаляются после обработки.
+    var tracks: [String: URL] = [:]
 }
 
 final class RecorderEngine: NSObject, SCStreamDelegate {
@@ -271,13 +274,15 @@ final class RecorderEngine: NSObject, SCStreamDelegate {
         if writer.status == .failed {
             throw writer.error ?? MeetRecError("Ошибка при завершении записи файла.")
         }
+        // Дорожки до сведения: после него микрофон и звонок уже не разделить.
+        let tracks = await exportTracks(from: tempURL)
         do {
             try await mixdown(from: tempURL, to: finalURL)
         } catch {
             // Если сведение не удалось — сохраняем «сырой» файл со всеми дорожками.
             let fallback = finalURL.deletingPathExtension().appendingPathExtension("mov")
             try FileManager.default.moveItem(at: tempURL, to: fallback)
-            return RecordingResult(audioURL: fallback, videoURL: captureVideo ? fallback : nil)
+            return RecordingResult(audioURL: fallback, videoURL: captureVideo ? fallback : nil, tracks: tracks)
         }
 
         var videoURL: URL?
@@ -293,7 +298,75 @@ final class RecorderEngine: NSObject, SCStreamDelegate {
             }
         }
         try? FileManager.default.removeItem(at: tempURL)
-        return RecordingResult(audioURL: finalURL, videoURL: videoURL)
+        return RecordingResult(audioURL: finalURL, videoURL: videoURL, tracks: tracks)
+    }
+
+    /// Выгружает звук звонка и микрофона в отдельные WAV 16 кГц моно.
+    /// Порядок дорожек в файле совпадает с порядком входов писателя: звонок, микрофон.
+    private func exportTracks(from source: URL) async -> [String: URL] {
+        let asset = AVURLAsset(url: source)
+        guard let audioTracks = try? await asset.loadTracks(withMediaType: .audio), audioTracks.count >= 2 else {
+            return [:]
+        }
+        var out: [String: URL] = [:]
+        for (name, track) in [("call", audioTracks[0]), ("mic", audioTracks[1])] {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("meetrec-\(name)-\(UUID().uuidString).wav")
+            do {
+                // Дорожка могла начаться позже начала записи: дополняем тишиной,
+                // чтобы время совпадало со сведённым файлом и расшифровкой.
+                let start = (try? await track.load(.timeRange).start.seconds) ?? 0
+                try Self.exportTrack(asset: asset, track: track, leadingSeconds: start.isFinite ? start : 0, to: url)
+                out[name] = url
+            } catch {
+                Log.error("Не удалось выгрузить дорожку \(name): \(error.localizedDescription)")
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        return out
+    }
+
+    private static func exportTrack(asset: AVAsset, track: AVAssetTrack, leadingSeconds: Double, to url: URL) throws {
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        reader.add(output)
+        guard reader.startReading() else {
+            throw reader.error ?? MeetRecError("Не удалось прочитать дорожку.")
+        }
+        FileManager.default.createFile(atPath: url.path, contents: LiveDSP.wavHeader(dataBytes: 0))
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        handle.seekToEndOfFile()
+        var bytes = 0
+        let silence = max(0, Int(leadingSeconds * 16_000)) * 2
+        if silence > 0 {
+            handle.write(Data(count: silence))
+            bytes += silence
+        }
+        while let buffer = output.copyNextSampleBuffer() {
+            guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
+            let length = CMBlockBufferGetDataLength(block)
+            var data = Data(count: length)
+            let status = data.withUnsafeMutableBytes {
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: $0.baseAddress!)
+            }
+            guard status == noErr else { continue }
+            handle.write(data)
+            bytes += length
+        }
+        guard reader.status == .completed else {
+            throw reader.error ?? MeetRecError("Чтение дорожки прервано.")
+        }
+        handle.seek(toFileOffset: 0)
+        handle.write(LiveDSP.wavHeader(dataBytes: bytes))
     }
 
     /// Собирает итоговое видео: дорожка экрана без перекодирования + сведённый звук.

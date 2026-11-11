@@ -106,6 +106,9 @@ private struct RecordingDetail: View {
         VStack(spacing: 0) {
             actionsBar
             Divider()
+            if state.hasTranscript(audio) {
+                SpeakersSection(audio: audio)
+            }
             content
         }
     }

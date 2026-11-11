@@ -302,19 +302,28 @@ enum LiveDSP {
         return sorted[low] + (sorted[high] - sorted[low]) * (position - Double(low))
     }
 
-    /// 16 кГц моно → WAV PCM16 (для whisper-cli).
-    static func wavData(_ samples: [Float]) -> Data {
+    /// Заголовок WAV PCM16 16 кГц моно для данных указанного размера.
+    static func wavHeader(dataBytes: Int) -> Data {
         var data = Data()
         func append<T: FixedWidthInteger>(_ value: T) {
             withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
         }
-        let bytes = UInt32(samples.count * 2)
+        let bytes = UInt32(dataBytes)
         data.append(contentsOf: Array("RIFF".utf8)); append(UInt32(36) + bytes)
         data.append(contentsOf: Array("WAVE".utf8))
         data.append(contentsOf: Array("fmt ".utf8)); append(UInt32(16))
         append(UInt16(1)); append(UInt16(1)); append(UInt32(liveSampleRate))
         append(UInt32(liveSampleRate * 2)); append(UInt16(2)); append(UInt16(16))
         data.append(contentsOf: Array("data".utf8)); append(bytes)
+        return data
+    }
+
+    /// 16 кГц моно → WAV PCM16 (для whisper-cli).
+    static func wavData(_ samples: [Float]) -> Data {
+        var data = wavHeader(dataBytes: samples.count * 2)
+        func append<T: FixedWidthInteger>(_ value: T) {
+            withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+        }
         data.reserveCapacity(data.count + samples.count * 2)
         for sample in samples {
             append(Int16(max(-1, min(1, sample)) * 32767))
