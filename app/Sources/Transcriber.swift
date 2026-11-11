@@ -120,7 +120,8 @@ final class Transcriber {
         }
 
         let data = try Data(contentsOf: json)
-        let parsed = try JSONDecoder().decode(WhisperOutput.self, from: data)
+        var parsed = try JSONDecoder().decode(WhisperOutput.self, from: data)
+        parsed.transcription = Self.filtered(parsed)
 
         var speakers: [DiarizationService.SpeakerSegment] = []
         if diarize {
@@ -330,6 +331,7 @@ final class Transcriber {
     // MARK: - Формат результата
 
     private struct WhisperOutput: Decodable {
+        struct Result: Decodable { let language: String? }
         struct Segment: Decodable {
             struct Offsets: Decodable {
                 let from: Int
@@ -338,7 +340,27 @@ final class Transcriber {
             let offsets: Offsets
             let text: String
         }
-        let transcription: [Segment]
+        let result: Result?
+        var transcription: [Segment]
+    }
+
+    /// Убирает титры-галлюцинации и петли декодера (фильтры живых субтитров в бережном режиме).
+    private static func filtered(_ output: WhisperOutput) -> [WhisperOutput.Segment] {
+        let segments = output.transcription.map {
+            LiveSegment(start: Double($0.offsets.from) / 1000, end: Double($0.offsets.to) / 1000,
+                        text: $0.text, lang: "")
+        }
+        let duration = (segments.map(\.end).max() ?? 0) + 1
+        let clean = CaptionFilters.clean(
+            segments, duration: duration, mode: .transcript, lang: output.result?.language ?? "")
+        if clean.count < segments.count {
+            Log.info("Расшифровка: убрано сегментов-галлюцинаций \(segments.count - clean.count) из \(segments.count)")
+        }
+        return clean.map {
+            WhisperOutput.Segment(
+                offsets: .init(from: Int(($0.start * 1000).rounded()), to: Int(($0.end * 1000).rounded())),
+                text: $0.text)
+        }
     }
 
     private func renderMarkdown(audio: URL, segments: [WhisperOutput.Segment], header: String? = nil) -> String {
