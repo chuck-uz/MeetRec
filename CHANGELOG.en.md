@@ -7,6 +7,35 @@ Russian version: [CHANGELOG.md](CHANGELOG.md).
 
 ## [Unreleased]
 
+## [1.23] — 2026-11-12
+
+### Added
+- **New single-window interface.** Meetings grouped by date on the left; on the right the
+  selected meeting: summary and chat, transcript with a player (click a timestamp to
+  seek), captions, speakers. Recording, archive search, voices and settings live in the
+  same window. Per-meeting options (captions, speakers, voices, summary, video) are chips
+  on the "Новая запись" screen.
+- **External models with your API key: Claude, OpenAI, DeepSeek, OpenRouter.** In
+  Settings → "Модель ИИ" you can hand summaries, chat, archive answers and caption
+  translation to an external provider. The key is stored in the macOS Keychain and saved
+  as soon as it is pasted; "Проверить" verifies the key and the model name. Only text
+  goes to the provider — audio, recognition, voices and the index stay on the Mac; the
+  destination is stated under the question field. Summaries and chat now also work on
+  Macs with less than 16 GB of memory.
+- **Model menu under the question field.** Downloaded local models and the models of
+  providers that have a key, plus a shortcut to model settings.
+- **Glossary.** System names and surnames from Settings → "Словарь" are passed as a hint
+  to Whisper (transcripts and captions) and to the model (summaries and chat).
+- **"Скопировать" button** under summaries and chat answers.
+
+### Changed
+- **Live captions appear in the main window.** The always-on-top panel opens with the
+  "Поверх экрана" button and closes after the recording.
+- **Summaries and answers can be selected as a whole**, not one paragraph at a time.
+- **The model corrects recognition errors.** Garbled technology and product names (e.g.
+  "PastGrew" for PostgreSQL) are restored from context in summaries and answers; names
+  are checked against the attendee list.
+
 ## [1.22.1] — 2026-11-11
 
 ### Fixed

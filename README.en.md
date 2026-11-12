@@ -19,29 +19,31 @@
 
 ## Why MeetRec
 
-Every meeting tool records only itself. MeetRec records **any** meeting — Zoom, Google Meet, Teams, a phone call in your browser — because it captures the Mac's system audio together with your microphone and mixes them into a single `.m4a`. When the meeting ends, a text transcript with timestamps appears next to the recording. Everything happens **on your Mac**: no servers, no subscriptions, nothing leaves your machine.
+Every meeting tool records only itself. MeetRec records **any** meeting — Zoom, Google Meet, Teams, a phone call in your browser — because it captures the Mac's system audio together with your microphone and mixes them into a single `.m4a`. When the meeting ends, a text transcript with timestamps appears next to the recording. By default everything happens **on your Mac**: no servers, no subscriptions, nothing leaves your machine. If you want a stronger model, you can plug in Claude, OpenAI, DeepSeek or OpenRouter with your own API key; then only the meeting text goes to the provider, and the app says so explicitly.
 
 ## Features
 
-- **One-click recording** — a big round button in a compact window (turns red and pulses while recording), or start straight from the menu bar; a live timer sits next to the clock.
+- **One-click recording** — the "Записать" button on the "Новая запись" screen, or start straight from the menu bar; a live timer sits next to the clock. Per-meeting options (captions, speakers, voices, summary, video) are chips under the title.
 - **System audio + microphone** captured simultaneously via ScreenCaptureKit and mixed into one stereo AAC file (48 kHz).
 - **Pause & resume recording** — a pause button in the window and the menu bar; the paused interval is cut out of the final file, so the timeline stays seamless — no silence gap. Works for both audio and screen video.
 - **Local transcription** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with the `large-v3-turbo` model, Metal-accelerated. An hour of audio takes ~4–6 minutes in the background. Language is auto-detected (Russian, English, and 90+ others).
 - **Timestamped Markdown transcripts** (`[03:12] …`) saved next to each recording — ready to paste into your favorite LLM.
 - **Speaker diarization (optional)** — transcripts as a dialog, «Спикер 1 / Спикер 2…» ([FluidAudio](https://github.com/FluidInference/FluidAudio), CoreML, fully on-device; ~30 MB models download automatically).
-- **Live captions with translation (optional)** — while recording, a panel over all windows (including full-screen Zoom) shows the conversation a few seconds behind, with foreign speech translated into your language by the local model. It never takes focus and is excluded from screen sharing; captions are saved to `… — субтитры.md`.
-- **Voice recognition (optional)** — your own lines are labeled "Я" from the microphone track; name the other speakers of a recording in "Мои встречи" and their names are filled in automatically in later meetings (marked with a similarity score, easy to fix). Only voice prints are stored — no audio, on your Mac only.
-- **Local AI chat per meeting** (Macs with 16+ GB memory) — summaries, action items, decisions, follow-up drafts or free-form questions over any transcript. Qwen 2.5 via bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) (Metal); the model downloads on first use and unloads after 5 idle minutes. Answers never leave your Mac.
-- **Model picker tuned to your hardware** (gear icon in the header) — Qwen 2.5 **3B / 7B / 14B** with a hint of what suits your Mac by unified memory: "Рекомендуется", "Доступно", "Впритык" or "Не хватит памяти". The recommended model for your Mac is selected by default; the first download (which can be ~9 GB) asks for confirmation. Pre-download a model or delete it to reclaim disk.
+- **Live captions with translation (optional)** — while recording, the conversation appears in the main window a few seconds behind, with foreign speech translated into your language by the selected model. The "Поверх экрана" button opens the captions in a panel over all windows (including full-screen Zoom) that never takes focus and is excluded from screen sharing; captions are saved to `… — субтитры.md`.
+- **Voice recognition (optional)** — your own lines are labeled "Я" from the microphone track; name the other speakers on the meeting screen and their names are filled in automatically in later meetings (marked with a similarity score, easy to fix). Only voice prints are stored — no audio, on your Mac only.
+- **AI chat per meeting** (Macs with 16+ GB memory, or an external model) — summaries, action items, decisions, follow-up drafts or free-form questions over any transcript. Qwen 2.5 via bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) (Metal); the model downloads on first use and unloads after 5 idle minutes. With the local model, answers never leave your Mac. Summaries and answers can be selected as a whole or copied with one button.
+- **Model picker tuned to your hardware** (Settings → "Модель ИИ") — Qwen 2.5 **3B / 7B / 14B** with a hint of what suits your Mac by unified memory: "Рекомендуется", "Доступно", "Впритык" or "Не хватит памяти". The recommended model for your Mac is selected by default; the first download (which can be ~9 GB) asks for confirmation. Pre-download a model or delete it to reclaim disk.
 - **Global archive search (local RAG)** (Macs with 16+ GB memory) — ask one question across *all* meetings and get an answer with cited sources. Transcripts are chunked, embedded with [bge-m3](https://huggingface.co/BAAI/bge-m3) and stored in a local SQLite index (FTS5 keyword + vector search, fused via RRF); the same local Qwen writes the answer. Nothing leaves your Mac.
 - **Automatic meeting summary (optional)** (Macs with 16+ GB memory) — after transcription the local model writes a structured summary (brief / decisions / action items) into a companion `… — итоги.md` next to the recording. Zero clicks from recording to action items.
-- **Unified "Мои встречи" window** — all recordings on the left; on the right, an AI chat for the selected meeting plus archive search. Open audio, video, transcript and summary in one click.
+- **External models with your API key (optional)** — Claude, OpenAI, DeepSeek or OpenRouter instead of the local model: for summaries, chat, archive answers and caption translation. The key is stored in the macOS Keychain; switch models right under the question field. Only text goes to the provider (transcript, your questions, lines to translate) — audio, speech recognition, voice prints and the search index stay on the Mac. Also works on Macs with less than 16 GB.
+- **Glossary** — list the system names and surnames that speech recognition gets wrong; they are passed as a hint to Whisper and to the model, and garbled names in summaries are corrected from context.
+- **One window** — meetings grouped by date on the left; on the right the selected meeting: summary and chat, transcript with a player (click a timestamp to seek), captions, speakers. Recording, archive search, voices and settings live in the same window.
 - **Self-updating model** — the app checks [`models.json`](models.json) daily and downloads the newer recommended Whisper model automatically.
-- **Check for updates** — a daily check against GitHub releases surfaces an "обновить" badge; the current version is shown right in the window header.
+- **Check for updates** — a daily check against GitHub releases surfaces an "обновить" badge; the current version is shown in Settings.
 - **Google Drive aware** — if Google Drive for desktop is installed, recordings go to *My Drive → Записи встреч* and sync to the cloud automatically.
 - **Google Calendar integration** — recordings are named after the current meeting, attendees go into the transcript header, and a "Meeting started" notification offers one-click recording. See [setup below](#google-calendar-optional).
 - **Screen video recording (optional)** — a toggle captures video at 30 fps (HEVC, hardware-encoded, ~0.7–1.5 GB/hour) alongside audio. Choose the **source**: the whole screen, a specific display, or a **single window**. When capturing a window, audio is still recorded in full (system + microphone), so the meeting audio is never lost even if you record a different window (a doc, slides). An `.mp4` with the mixed audio appears next to the `.m4a`; file size is shown live while recording.
-- **Stays out of your way** — movable window with a pin-on-top toggle, quick actions in the menu bar, launch-at-login checkbox.
+- **Stays out of your way** — quick actions in the menu bar; always-on-top and launch-at-login are in Settings.
 
 ## Installation
 
@@ -88,17 +90,20 @@ Access is read-only (`calendar.readonly`); tokens are stored in the macOS Keycha
 
 | Action | How |
 |---|---|
-| Start / stop recording | Click the big button, or the menu bar icon → *Начать запись* |
-| Pause / resume recording | "Пауза" button below the record button (the paused gap is cut from the file) |
+| Start / stop recording | "Новая запись" → "Записать", or the menu bar icon → *Начать запись* |
+| Pause / resume recording | "Пауза" on the recording screen (the paused gap is cut from the file) |
 | Watch recording time | Timer appears in the menu bar next to the icon |
-| Open a recording or transcript | Click it in the *Последние записи* list |
-| Transcribe an older recording | Click the ⊕-text icon in its row |
-| Label speakers in transcripts | «Диаризация» toggle |
-| Chat with AI about a meeting | 💬 icon in a transcribed recording's row |
-| Keep window above Zoom | Pin icon in the window header |
-| Change output folder | *Изменить* in the folder card |
-| Record screen video | «Видео экрана» toggle before starting |
-| Open a recording's video | Film icon in the recording row |
+| Open a meeting | Click it in the list on the left |
+| Transcribe an older recording | Open the meeting → "Расшифровать" |
+| Label speakers in transcripts | "Говорящие" chip before recording |
+| Chat with AI about a meeting | "Итоги и чат" tab on the meeting screen |
+| Switch the AI model | The model menu under the question field, or Settings → "Модель ИИ" |
+| Connect Claude / OpenAI / DeepSeek / OpenRouter | Settings → "Модель ИИ" → "Где работает ИИ", paste the API key |
+| Search across all meetings | "Поиск по встречам" in the sidebar |
+| Captions over Zoom | "Поверх экрана" button while recording |
+| Fix spelling of terms and surnames | Settings → "Словарь" |
+| Change output folder | Settings → "Папка записей" → *Изменить* |
+| Record screen video | "Видео" chip before starting |
 
 ## How it works
 
@@ -139,6 +144,8 @@ A minimal CLI variant also lives in the repo: `swiftc -O -parse-as-library MeetR
 ## Privacy
 
 MeetRec only goes online to fetch models (Whisper and diarization — from Hugging Face, once) and the recommended-models manifest `models.json` in this repository; with Google Calendar connected, it also calls the Calendar API (read-only). Audio, transcripts, captions and voice prints never leave your Mac. A voice print is biometric data: enable voice recognition with participants' consent. Always make sure recording meetings is legal in your jurisdiction and that participants are informed.
+
+The one exception is when you choose an external model in Settings → \"Модель ИИ\": then the transcript text, your questions and the lines to translate are sent to the selected provider (Anthropic, OpenAI, DeepSeek or OpenRouter) with your API key. Audio, video, voice prints and the search index are never sent. The key is stored in the macOS Keychain.
 
 ## License
 

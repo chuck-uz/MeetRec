@@ -375,9 +375,14 @@ struct MeetingView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
-            Text(LLM.privacyNote)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 8) {
+                ModelMenu()
+                Text(LLM.provider.map { "текст встречи отправляется в \($0.company)" }
+                     ?? "локально, данные не покидают Mac")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: 680)
         .padding(.horizontal, 24)
@@ -634,5 +639,62 @@ struct CopyButton: View {
         .buttonStyle(.plain)
         .pointingCursor()
         .help("Скопировать текст целиком")
+    }
+}
+
+/// Выбор модели прямо под полем вопроса: локальные скачанные и внешние с сохранённым ключом.
+struct ModelMenu: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        let _ = state.cloudRevision
+        let _ = state.modelsRevision
+        Menu {
+            if Hardware.supportsChat {
+                Section("На этом Mac") {
+                    ForEach(LLMCatalog.all.filter(LLMCatalog.isDownloaded)) { model in
+                        item(model.title, on: state.llmBackend == "local" && state.llmModelID == model.id) {
+                            state.selectLLM(model)
+                            state.llmBackend = "local"
+                        }
+                    }
+                }
+            }
+            ForEach(CloudProvider.allCases.filter(\.hasKey)) { provider in
+                Section(provider.title) {
+                    ForEach(models(of: provider), id: \.self) { name in
+                        item(name, on: state.llmBackend == provider.rawValue && provider.model == name) {
+                            provider.model = name
+                            state.llmBackend = provider.rawValue
+                            state.cloudRevision += 1
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Настройки моделей…") { state.route = .settings }
+        } label: {
+            HStack(spacing: 3) {
+                Text(LLM.available ? LLM.title : "Выбрать модель")
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Модель для итогов, чата и перевода субтитров")
+    }
+
+    /// Подсказки провайдера плюс вписанная вручную модель, если её нет в списке.
+    private func models(of provider: CloudProvider) -> [String] {
+        provider.models.contains(provider.model) ? provider.models : [provider.model] + provider.models
+    }
+
+    private func item(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
     }
 }

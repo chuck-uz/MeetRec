@@ -67,11 +67,16 @@ All Swift lives in `app/Sources/` (single executable target `MeetRec`).
 
 | File | Lines | Responsibility |
 |---|---|---|
-| `MeetRecApp.swift` | 172 | `@main` App: window scenes (`main`, `meetings`), `MenuBarExtra`, `AppDelegate` (single-instance, notifications, terminate-while-recording) |
+| `MeetRecApp.swift` | 172 | `@main` App: one window scene (`main`), `MenuBarExtra`, `AppDelegate` (single-instance, notifications, terminate-while-recording) |
 | `AppState.swift` | 729 | **Central `@MainActor ObservableObject`** — all published state, orchestration of every subsystem, error routing to `Log`, LLM model selection/downloads |
-| `ContentView.swift` | 750 | Main window UI (record button, feature cards, recent list, footer) + gear entry to the model screen |
-| `MeetingsView.swift` | 204 | "Мои встречи" split-view window (sidebar + chat/search detail) |
-| `ChatView.swift` | 248 | Per-meeting AI chat (view + `ChatViewModel`) |
+| `MainWindow.swift` | 371 | The single window: `AppRoute`, sidebar (meetings grouped by date), detail routing |
+| `MeetingView.swift` | 700 | Meeting screen: summary + chat, transcript with player, captions, speakers; `MarkdownLite`, `ModelMenu` |
+| `RecordingViews.swift` | 275 | "Новая запись" (per-meeting option chips) and the live recording screen with captions |
+| `SettingsView.swift` | 305 | Settings: recording, glossary, calendar, AI model (local / external provider), app |
+| `Theme.swift` | 198 | Design tokens and small shared controls (`Chip`, `PillButton`, `ErrorBanner`) |
+| `ChatView.swift` | 107 | Per-meeting chat model (`ChatViewModel`) |
+| `CloudLLM.swift` | 300 | External providers (`CloudProvider`, Keychain keys), `LLM` facade routing local vs. cloud, SSE clients |
+| `Glossary.swift` | 51 | User glossary → Whisper `--prompt` and LLM instruction |
 | `ModelSettingsView.swift` | 185 | AI-model picker screen — hardware fit badges, per-model download/delete |
 | `ArchiveSearchView.swift` | 226 | Global archive search UI (view + `ArchiveSearchModel`) |
 | `RecorderEngine.swift` | 318 | Capture → `AVAssetWriter` → mixdown/remux; pause via timestamp offset |
@@ -295,6 +300,32 @@ Same-person-across-meetings could not be measured on old mixed recordings (no na
 
 ---
 
+### 5.11 External models & glossary — `CloudLLM`, `Glossary`
+
+Every LLM call (summary, chat, archive answer, caption translation) goes through the
+`LLM` facade. `UserDefaults["llmBackend"]` is `local` (→ `LLMRuntime`, llama-server) or a
+`CloudProvider` id (→ `CloudLLM`):
+
+| Provider | Endpoint | Notes |
+|---|---|---|
+| Anthropic | `POST api.anthropic.com/v1/messages` | `anthropic-version: 2026-10-21`; system turns go to top-level `system`; no `temperature`; `max_tokens ≥ 16000` because thinking counts against it; `effort: low` for short tasks (caption lines); server-side refusal fallback for Opus/Sonnet 5.5 and Fable |
+| OpenAI | `POST api.openai.com/v1/chat/completions` | no `temperature` / `max_tokens` (reasoning models reject them) |
+| DeepSeek | `POST api.deepseek.com/chat/completions` | `max_tokens ≥ 4096` — `deepseek-reasoner` spends the limit on reasoning first |
+| OpenRouter | `POST openrouter.ai/api/v1/chat/completions` | same as DeepSeek |
+
+All four stream SSE; HTTP errors are mapped to actionable Russian messages (bad key, no
+funds, unknown model, rate limit). API keys live in the Keychain (service
+`io.github.chuckuz.meetrec.llm`, account = provider id), never in defaults or logs. The
+model name is a free-text field with suggestions. `LLM.available` replaces the 16 GB gate
+for summaries and chat, so low-memory Macs can use an external model; indexing and
+embeddings stay local and keep the hardware gate.
+
+`Glossary` stores user terms in defaults. Up to ~500 characters are passed to
+`whisper-cli` as `--prompt … --carry-initial-prompt` (post-recording transcription and
+live captions); a segment that echoes the prompt is dropped by `CaptionFilters`. The full
+list is appended to `Summarizer.recognitionNote`, which tells the model that the
+transcript is ASR output and garbled product names must be restored from context.
+
 ## 6. Data & storage
 
 | What | Where |
@@ -366,4 +397,9 @@ MeetRec makes network requests only for:
 2. **`models.json`** manifest + **GitHub Releases** — update checks.
 3. **Google Calendar API** — only if the user connects a calendar (read-only).
 
-Audio, video, transcripts, summaries, and the search index never leave the Mac.
+4. **External LLM provider** — only if the user selects one and stores an API key:
+   transcript text, chat questions and caption lines to translate go to Anthropic,
+   OpenAI, DeepSeek or OpenRouter. The UI states the destination under the chat field.
+
+Audio, video, voice prints and the search index never leave the Mac. Transcripts and
+summaries leave it only in case 4.
