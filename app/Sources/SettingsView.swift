@@ -157,9 +157,12 @@ private struct CloudModelSettings: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("API-ключ").font(.system(size: 13.5)).frame(width: 80, alignment: .leading)
-                SecureField(hasKey ? "сохранён в Связке ключей" : "вставьте ключ", text: $key)
+                SecureField(hasKey ? "сохранён в Связке ключей\(keyTail)" : "вставьте ключ", text: $key)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(save)
+                    // Сохраняем сразу, как только ключ вставлен: переключение провайдера
+                    // или уход с экрана его не теряют.
+                    .onChange(of: key) { autosave() }
                 Button("Сохранить", action: save).disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
                 if hasKey {
                     Button("Удалить") {
@@ -203,6 +206,25 @@ private struct CloudModelSettings: View {
         }
         .padding(.vertical, 10)
         .onAppear(perform: refresh)
+    }
+
+    /// Последние символы сохранённого ключа — чтобы было видно, какой именно ключ лежит.
+    private var keyTail: String {
+        let _ = hasKey
+        guard let saved = provider.apiKey, saved.count >= 12 else { return "" }
+        return " · …\(saved.suffix(4))"
+    }
+
+    private func autosave() {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 8 else { return }
+        do {
+            try provider.setKey(trimmed)
+            hasKey = true
+            state.cloudRevision += 1
+        } catch {
+            result = (false, error.localizedDescription)
+        }
     }
 
     private func refresh() {

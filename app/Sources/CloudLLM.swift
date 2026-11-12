@@ -197,6 +197,9 @@ enum CloudLLM {
         onStatus: @escaping @Sendable (String) -> Void
     ) async throws {
         guard let key = provider.apiKey else {
+            if provider.hasKey {
+                throw MeetRecError("Не удалось прочитать ключ \(provider.title) из Связки ключей. Разрешите MeetRec доступ в появившемся окне macOS или сохраните ключ заново.")
+            }
             throw MeetRecError("Не задан API-ключ \(provider.title). Добавьте его в «Настройки» → «Модель ИИ».")
         }
         onStatus("\(provider.title) думает…")
