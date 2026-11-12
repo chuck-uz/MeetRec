@@ -17,12 +17,6 @@ extension Notification.Name {
     static let meetrecStartRecording = Notification.Name("io.github.chuckuz.meetrec.startRecording")
 }
 
-/// Что показать в окне «Мои встречи»: поиск по архиву или чат по конкретной записи.
-enum MeetingsTarget: Hashable {
-    case search
-    case recording(URL)  // аудиофайл записи
-}
-
 @MainActor
 final class AppState: ObservableObject {
     static private(set) weak var shared: AppState?
@@ -102,8 +96,8 @@ final class AppState: ObservableObject {
     }
     private var suppressLoginItemUpdate = false
     @Published var recordingSizeText: String?
-    @Published var chatTranscript: URL?
-    @Published var meetingsTarget: MeetingsTarget?
+    /// Экран в рабочей области главного окна.
+    @Published var route: AppRoute = .new
     @Published var availableUpdate: AppRelease?
     @Published var transcribeProgress: [URL: String] = [:]
     @Published var modelStatus: String?
@@ -114,6 +108,16 @@ final class AppState: ObservableObject {
 
     // Выбор модели ИИ (v1.15)
     @Published var llmModelID: String = LLMCatalog.current.id
+    /// Где работает ИИ: "local" или id внешнего провайдера (CloudProvider).
+    @Published var llmBackend: String = UserDefaults.standard.string(forKey: LLM.backendKey) ?? "local" {
+        didSet {
+            UserDefaults.standard.set(llmBackend, forKey: LLM.backendKey)
+            // Локальная модель больше не нужна в памяти.
+            if llmBackend != "local" { Task { await LLMRuntime.shared.shutdown() } }
+        }
+    }
+    /// Тик: ключ или модель внешнего провайдера изменились.
+    @Published var cloudRevision = 0
     @Published var modelDownloads: [String: String] = [:] // id → текст прогресса
     @Published private(set) var modelsRevision = 0        // тик для обновления списка на диске
 
@@ -151,6 +155,24 @@ final class AppState: ObservableObject {
         if let flag = args.firstIndex(of: "--captions-demo"), flag + 1 < args.count {
             let file = URL(fileURLWithPath: args[flag + 1])
             DispatchQueue.main.async { self.startCaptionsDemo(file) }
+        }
+        // Проверка интерфейса: `MeetRec --preview new|live|meeting|search|voices|settings`
+        // открывает нужный экран во второй копии рядом с основной.
+        if let flag = args.firstIndex(of: "--preview"), flag + 1 < args.count {
+            switch args[flag + 1] {
+            case "live": route = .live
+            case "search": route = .search
+            case "voices": route = .voices
+            case "settings": route = .settings
+            case "meeting":
+                let long = allRecordings.first { audio in
+                    hasSummary(audio) && ((try? Data(contentsOf: Transcriber.transcriptURL(for: audio)).count) ?? 0) > 4000
+                }
+                if let audio = long ?? allRecordings.first(where: { hasTranscript($0) }) {
+                    route = .meeting(audio)
+                }
+            default: route = .new
+            }
         }
         if let flag = args.firstIndex(of: "--voice-calibrate"), flag + 2 < args.count {
             let folder = URL(fileURLWithPath: args[flag + 1])
@@ -428,7 +450,7 @@ final class AppState: ObservableObject {
         let live = LiveCaptioner(native: nativeLanguage)
         captioner = live
         live.start()
-        CaptionsPanel.shared.show(live)
+        route = .live
         Log.info("Живые субтитры: демо по файлу \(file.lastPathComponent)")
         Task.detached {
             do {
@@ -636,7 +658,9 @@ final class AppState: ObservableObject {
                     await self.captioner?.finish(audioURL: nil)
                     self.captioner = captioner
                     captioner.start()
-                    CaptionsPanel.shared.show(captioner)
+                    // Субтитры идут в главном окне. Окно поверх экрана — только по кнопке;
+                    // если оно осталось открытым с прошлой встречи, переключаем его на новую.
+                    if CaptionsPanel.shared.isVisible { CaptionsPanel.shared.show(captioner) }
                 }
                 Log.info("Запись начата · видео=\(captureVideo)")
                 self.engine = engine
@@ -694,6 +718,7 @@ final class AppState: ObservableObject {
                 let result = try await engine.stop()
                 // Субтитры дораспознают хвост до итоговой расшифровки: два whisper сразу не нужны.
                 await captioner?.finish(audioURL: result.audioURL)
+                CaptionsPanel.shared.hide()
                 lastSaved = result.audioURL
                 errorMessage = nil
                 if autoTranscribe {
@@ -738,9 +763,9 @@ final class AppState: ObservableObject {
                 if Hardware.supportsChat {
                     try? await ArchiveIndexer.indexTranscript(at: transcript)
                     await EmbeddingService.shared.shutdown()
-                    if autoSummary {
-                        await runSummary(transcript: transcript, audio: audio)
-                    }
+                }
+                if autoSummary, LLM.available {
+                    await runSummary(transcript: transcript, audio: audio)
                 }
             } catch {
                 errorMessage = "Транскрибация: \(error.localizedDescription)"

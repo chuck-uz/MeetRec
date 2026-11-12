@@ -90,6 +90,7 @@ enum CaptionFilters {
         for var segment in segments {
             let text = collapseRepeats(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))
             guard !text.isEmpty,
+                  !text.hasPrefix("Глоссарий:"), // на тишине Whisper может повторить подсказку-словарь
                   !matches(credits, text), !matches(caption, text),
                   !(checkFarScript && matches(farScript, text)),
                   !(live && matches(liveOnly, text)),

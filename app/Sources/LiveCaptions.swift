@@ -53,9 +53,7 @@ final class LiveCaptioner: ObservableObject {
 
     init(native: String) {
         self.native = native
-        translationAvailable = Hardware.supportsChat
-            && LLMRuntime.serverBinary() != nil
-            && FileManager.default.fileExists(atPath: LLMRuntime.modelURL.path)
+        translationAvailable = LLM.ready
     }
 
     /// Вызывается на очереди захвата для каждого аудиобуфера.
@@ -91,9 +89,12 @@ final class LiveCaptioner: ObservableObject {
             queue = continuation
             translations = Task { [weak self] in
                 // Прогрев: иначе первые переводы опоздают на время загрузки модели.
-                _ = try? await LLMRuntime.shared.complete(
-                    turns: [ChatTurn(role: .user, text: "Ответь одним словом: готов?")],
-                    temperature: 0, maxTokens: 4, onStatus: { _ in })
+                // Внешней модели прогрев не нужен.
+                if LLM.provider == nil {
+                    _ = try? await LLM.complete(
+                        turns: [ChatTurn(role: .user, text: "Ответь одним словом: готов?")],
+                        temperature: 0, maxTokens: 4, onStatus: { _ in })
+                }
                 for await index in stream {
                     guard let self else { return }
                     await self.translate(index)
@@ -156,7 +157,7 @@ final class LiveCaptioner: ObservableObject {
         let context = entries[max(0, index - 4)..<index].map(\.text).joined(separator: "\n")
         let prompt = Self.translationPrompt(target: entry.target, source: entry.lang, context: context)
         do {
-            let raw = try await LLMRuntime.shared.complete(
+            let raw = try await LLM.complete(
                 turns: [ChatTurn(role: .system, text: prompt), ChatTurn(role: .user, text: entry.text)],
                 temperature: 0.2, maxTokens: 300, onStatus: { _ in })
             let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -403,6 +404,7 @@ private final class LiveWorker: @unchecked Sendable {
         var args = ["-m", model.path, "-f", wav.path, "-l", "auto", "-t", "8", "-fa",
                     "-nf", "-mc", "0", "-oj", "-of", base.path, "-np"]
         if let vad { args += ["--vad", "--vad-model", vad.path] }
+        args += Glossary.whisperArguments
         let status = try await Self.run(whisper, args)
         guard status == 0 else { throw MeetRecError("whisper-cli завершился с кодом \(status)") }
         let output = try JSONDecoder().decode(Output.self, from: Data(contentsOf: json))

@@ -20,18 +20,12 @@ struct MeetRecApp: App {
 
     var body: some Scene {
         Window("MeetRec", id: "main") {
-            ContentView()
+            MainWindow()
                 .environmentObject(state)
         }
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 1180, height: 760)
         .defaultPosition(.center)
-
-        Window("Мои встречи", id: "meetings") {
-            MeetingsView()
-                .environmentObject(state)
-        }
-        .defaultLaunchBehavior(.suppressed)
 
         MenuBarExtra {
             MenuContent()
@@ -64,8 +58,8 @@ struct MenuContent: View {
                 state.pauseResume()
             }
         }
-        if state.captioner != nil {
-            Button("Показать субтитры") {
+        if state.captioner != nil, state.isRecording {
+            Button("Субтитры поверх экрана") {
                 state.showCaptions()
             }
         }
@@ -81,10 +75,6 @@ struct MenuContent: View {
         }
         Button("Показать логи…") {
             state.openLogs()
-        }
-        Button("Мои встречи…") {
-            openWindow(id: "meetings")
-            NSApp.activate(ignoringOtherApps: true)
         }
         Divider()
         Button("Завершить MeetRec") {
@@ -102,9 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         let bundleID = Bundle.main.bundleIdentifier ?? "io.github.chuckuz.meetrec"
         let copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        // Проверочные запуски (демо субтитров, калибровка голосов) — рядом с основным.
+        // Проверочные запуски (демо субтитров, калибровка голосов, просмотр экранов) — рядом с основным.
         let checkRun = CommandLine.arguments.contains("--captions-demo")
             || CommandLine.arguments.contains("--voice-calibrate")
+            || CommandLine.arguments.contains("--preview")
         if copies.count > 1, !checkRun {
             // Уже есть работающий экземпляр — попросим его показать окно и выйдем.
             DistributedNotificationCenter.default().postNotificationName(

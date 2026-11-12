@@ -49,7 +49,7 @@ final class ArchiveSearchModel: ObservableObject {
                 }
                 status = "формулирую ответ…"
                 let turns = ArchiveIndexer.buildPrompt(question: question, hits: found)
-                try await LLMRuntime.shared.generate(
+                try await LLM.generate(
                     turns: turns,
                     onToken: { [weak self] token in
                         Task { @MainActor in

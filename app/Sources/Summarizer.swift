@@ -64,7 +64,7 @@ enum Summarizer {
             ChatTurn(role: .system, text: finalSystemPrompt(reducing: false)),
             ChatTurn(role: .user, text: "ТРАНСКРИПТ встречи «\(title)»:\n\(transcript)"),
         ]
-        return try await LLMRuntime.shared.complete(turns: turns, onStatus: onStatus)
+        return try await LLM.complete(turns: turns, onStatus: onStatus)
     }
 
     // MARK: - Map-reduce (длинные встречи)
@@ -101,7 +101,7 @@ enum Summarizer {
             ChatTurn(role: .system, text: finalSystemPrompt(reducing: true)),
             ChatTurn(role: .user, text: "ВЫЖИМКИ ФРАГМЕНТОВ встречи «\(title)» (по порядку):\n\n\(combined)"),
         ]
-        return try await LLMRuntime.shared.complete(turns: turns, onStatus: { _ in })
+        return try await LLM.complete(turns: turns, onStatus: { _ in })
     }
 
     /// Обобщает один кусок: только факты этого фрагмента, компактно.
@@ -118,13 +118,26 @@ enum Summarizer {
             - открытые вопросы.
             Только факты из фрагмента, ничего не выдумывай. Без вступлений и заключений. \
             Пиши по-русски, компактно.
+
+            \(recognitionNote)
             """),
             ChatTurn(role: .user, text: "ФРАГМЕНТ ТРАНСКРИПТА:\n\(chunk)"),
         ]
-        return try await LLMRuntime.shared.complete(turns: turns, onStatus: { _ in })
+        return try await LLM.complete(turns: turns, onStatus: { _ in })
     }
 
     // MARK: - Общий формат итогов
+
+    /// Расшифровка автоматическая: модель должна исправлять искажённые термины, а не повторять их.
+    static var recognitionNote: String { recognitionRules + Glossary.llmNote }
+
+    private static let recognitionRules = """
+    Транскрипт получен автоматическим распознаванием речи и содержит ошибки: названия технологий, \
+    продуктов, компаний и аббревиатуры часто записаны на слух неверно (например, «PastGrew» — это \
+    PostgreSQL, «кубернетис» — Kubernetes). Восстанавливай по контексту правильное название и пиши \
+    его в общепринятом виде; искажённый вариант не повторяй. Имена и фамилии сверяй со списком \
+    участников в начале транскрипта, если он есть; если уверенности нет — оставляй как в транскрипте.
+    """
 
     private static let formatInstructions = """
     Формат — строго эти разделы markdown:
@@ -162,8 +175,10 @@ enum Summarizer {
         return """
         Ты — опытный ассистент по рабочим встречам. Составь ПОДРОБНЫЕ, содержательные \
         итоги встречи по транскрипту. Раскрывай контекст, позиции сторон и аргументы, \
-        приводи конкретику (названия систем, цифры, имена участников). Расшифровывай \
-        очевидный жаргон, если он искажён в тексте. Не будь кратким в ущерб сути.
+        приводи конкретику (названия систем, цифры, имена участников). \
+        Не будь кратким в ущерб сути.
+
+        \(recognitionNote)
 
         \(formatInstructions)
 
