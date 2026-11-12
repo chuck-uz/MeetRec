@@ -108,6 +108,16 @@ final class AppState: ObservableObject {
 
     // Выбор модели ИИ (v1.15)
     @Published var llmModelID: String = LLMCatalog.current.id
+    /// Где работает ИИ: "local" или id внешнего провайдера (CloudProvider).
+    @Published var llmBackend: String = UserDefaults.standard.string(forKey: LLM.backendKey) ?? "local" {
+        didSet {
+            UserDefaults.standard.set(llmBackend, forKey: LLM.backendKey)
+            // Локальная модель больше не нужна в памяти.
+            if llmBackend != "local" { Task { await LLMRuntime.shared.shutdown() } }
+        }
+    }
+    /// Тик: ключ или модель внешнего провайдера изменились.
+    @Published var cloudRevision = 0
     @Published var modelDownloads: [String: String] = [:] // id → текст прогресса
     @Published private(set) var modelsRevision = 0        // тик для обновления списка на диске
 
@@ -753,9 +763,9 @@ final class AppState: ObservableObject {
                 if Hardware.supportsChat {
                     try? await ArchiveIndexer.indexTranscript(at: transcript)
                     await EmbeddingService.shared.shutdown()
-                    if autoSummary {
-                        await runSummary(transcript: transcript, audio: audio)
-                    }
+                }
+                if autoSummary, LLM.available {
+                    await runSummary(transcript: transcript, audio: audio)
                 }
             } catch {
                 errorMessage = "Транскрибация: \(error.localizedDescription)"

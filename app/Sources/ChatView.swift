@@ -61,6 +61,8 @@ final class ChatViewModel: ObservableObject {
             с таймкодами\(transcript.contains("Спикер") ? " и говорящими" : ""). \
             Отвечай на русском, опирайся только на транскрипт; если информации нет — скажи об этом.
 
+            \(Summarizer.recognitionNote)
+
             ТРАНСКРИПТ:
             \(transcript)
             """)
@@ -76,7 +78,7 @@ final class ChatViewModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             do {
-                try await LLMRuntime.shared.generate(
+                try await LLM.generate(
                     turns: turns,
                     onToken: { [weak self] token in
                         Task { @MainActor in

@@ -107,6 +107,7 @@ final class Transcriber {
                 if let vad = Self.vadModel() {
                     args += ["--vad", "--vad-model", vad.path]
                 }
+                args += Glossary.whisperArguments
                 return args
             }()
         ) { chunk in

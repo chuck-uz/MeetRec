@@ -28,6 +28,10 @@ struct SettingsView: View {
                 }
             }
 
+            section("Словарь") {
+                GlossarySettings()
+            }
+
             section("Календарь") {
                 row("Google Календарь", detail: calendarDetail) {
                     if state.calendarConfigured {
@@ -41,9 +45,27 @@ struct SettingsView: View {
                 }
             }
 
-            if Hardware.supportsChat {
-                section("Модель ИИ") {
+            section("Модель ИИ") {
+                row("Где работает ИИ", detail: "итоги, чат, поиск по встречам и перевод субтитров") {
+                    Picker("", selection: $state.llmBackend) {
+                        Text("На этом Mac").tag("local")
+                        ForEach(CloudProvider.allCases) { provider in
+                            Text(provider.title).tag(provider.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                if let provider = CloudProvider(rawValue: state.llmBackend) {
+                    CloudModelSettings(provider: provider).id(provider)
+                } else if Hardware.supportsChat {
                     ModelSettingsView(onBack: nil)
+                        .padding(.vertical, 10)
+                } else {
+                    Text("Локальной модели нужен Mac с 16+ ГБ памяти (у вас \(Hardware.ramGB)). "
+                         + "Выберите внешнюю модель и добавьте её API-ключ.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                         .padding(.vertical, 10)
                 }
             }
@@ -118,5 +140,144 @@ struct SettingsView: View {
                 .labelsHidden()
                 .tint(Design.primary)
         }
+    }
+}
+
+/// Ключ и модель внешнего провайдера.
+private struct CloudModelSettings: View {
+    @EnvironmentObject var state: AppState
+    let provider: CloudProvider
+    @State private var key = ""
+    @State private var model = ""
+    @State private var hasKey = false
+    @State private var checking = false
+    @State private var result: (ok: Bool, text: String)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("API-ключ").font(.system(size: 13.5)).frame(width: 80, alignment: .leading)
+                SecureField(hasKey ? "сохранён в Связке ключей" : "вставьте ключ", text: $key)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(save)
+                Button("Сохранить", action: save).disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
+                if hasKey {
+                    Button("Удалить") {
+                        try? provider.setKey("")
+                        refresh()
+                    }
+                } else {
+                    Button("Получить…") { NSWorkspace.shared.open(provider.keysPage) }
+                        .help("Открыть страницу ключей \(provider.title) в браузере")
+                }
+            }
+            HStack(spacing: 8) {
+                Text("Модель").font(.system(size: 13.5)).frame(width: 80, alignment: .leading)
+                TextField(provider.models[0], text: $model)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(saveModel)
+                    .onChange(of: model) { saveModel() }
+                Menu("Выбрать") {
+                    ForEach(provider.models, id: \.self) { name in
+                        Button(name) { model = name }
+                    }
+                }
+                .fixedSize()
+                Button(checking ? "Проверяю…" : "Проверить") { check() }
+                    .disabled(!hasKey || checking)
+                    .help("Отправить короткий запрос: проверит ключ и название модели")
+            }
+            if let result {
+                Label(result.text, systemImage: result.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(result.ok ? Design.accent : Design.destructive)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            Text("Расшифровки, вопросы и реплики для перевода будут отправляться в \(provider.company) "
+                 + "и оплачиваться по тарифам провайдера. Запись звука, распознавание речи, голоса и поисковый "
+                 + "индекс остаются на этом Mac. Ключ хранится в Связке ключей macOS.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        hasKey = provider.hasKey
+        model = provider.model
+        key = ""
+        result = nil
+        state.cloudRevision += 1
+    }
+
+    private func save() {
+        do {
+            try provider.setKey(key)
+            refresh()
+            check()
+        } catch {
+            result = (false, error.localizedDescription)
+        }
+    }
+
+    private func saveModel() {
+        guard provider.model != model.trimmingCharacters(in: .whitespaces) || model.isEmpty else { return }
+        provider.model = model
+        result = nil
+        state.cloudRevision += 1
+    }
+
+    private func check() {
+        checking = true
+        result = nil
+        Task {
+            do {
+                try await CloudLLM.check(provider)
+                result = (true, "Работает: \(provider.title) · \(provider.model)")
+            } catch {
+                result = (false, error.localizedDescription)
+            }
+            checking = false
+        }
+    }
+}
+
+/// Термины и имена, которые распознавание должно писать правильно.
+private struct GlossarySettings: View {
+    @State private var text = Glossary.text
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Термины, названия систем и фамилии, которые распознавание пишет на слух неверно. "
+                 + "Через запятую или с новой строки, в правильном написании.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $text)
+                .font(.system(size: 13))
+                .frame(height: 84)
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
+                .onChange(of: text) { Glossary.text = text }
+            Text(hint)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var hint: String {
+        let _ = text
+        let total = Glossary.terms.count
+        if total == 0 { return "Например: PostgreSQL, MariaDB, Kubernetes, GitLab. Действует на новые расшифровки, субтитры, итоги и чат." }
+        let used = Glossary.termsInPrompt
+        return used < total
+            ? "Слов: \(total). Распознаванию помещаются первые \(used) — самые важные ставьте в начало. Итоги и чат учитывают все."
+            : "Слов: \(total). Действует на новые расшифровки, субтитры, итоги и чат."
     }
 }

@@ -55,7 +55,7 @@ struct NewRecordingView: View {
                         if state.voiceLibrary { state.voiceLibrary = false } else { voiceConsentVisible = true }
                     }
                     .help("Узнавать людей по голосу из прошлых встреч")
-                    if Hardware.supportsChat {
+                    if LLM.available {
                         Chip(title: "Итоги", icon: "list.bullet.rectangle", isOn: state.autoSummary) {
                             state.autoSummary.toggle()
                         }
@@ -109,7 +109,7 @@ struct NewRecordingView: View {
     private var footnote: String {
         let language = AppState.languageOptions.first { $0.code == state.transcribeLanguage }?.title ?? "Авто"
         var parts = [language, Transcriber.modelTitle]
-        if Hardware.supportsChat { parts.append(LLMSpec.current.title) }
+        if LLM.available { parts.append(LLM.title) }
         parts.append("папка «\(state.outputDir.lastPathComponent)»")
         return parts.joined(separator: " · ")
     }

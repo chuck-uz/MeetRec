@@ -277,23 +277,27 @@ struct MeetingView: View {
     @ViewBuilder
     private var summaryBlock: some View {
         if let summary {
-            MarkdownLite(text: summary, skipTitle: true)
+            let view = MarkdownLite(text: summary, skipTitle: true)
+            view
+            CopyButton(text: view.plainText)
         } else if state.summarizing.contains(audio) {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Собираю итоги встречи…").foregroundStyle(.secondary)
             }
-        } else if Hardware.supportsChat {
+        } else if LLM.available {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Итогов пока нет")
                     .font(.system(size: 17, design: .serif))
-                Text("Локальная модель составит «Кратко / Решения / Задачи» по расшифровке.")
+                Text("\(LLM.provider == nil ? "Локальная модель" : LLM.title) составит «Кратко / Решения / Задачи» по расшифровке.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Chip(title: "Собрать итоги", icon: "list.bullet.rectangle") { state.summarize(audio) }
             }
         } else {
-            Text("Итоги и чат с ИИ доступны на Mac с 16+ ГБ памяти. Расшифровка — на вкладке рядом.")
+            Text(LLM.provider != nil
+                ? "Добавьте API-ключ в «Настройки» → «Модель ИИ», чтобы собирать итоги и задавать вопросы."
+                : "Итоги и чат с ИИ доступны на Mac с 16+ ГБ памяти или с ключом внешней модели — см. «Настройки» → «Модель ИИ».")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -317,13 +321,20 @@ struct MeetingView: View {
                 Text(chat.status ?? "думаю…").font(.callout).foregroundStyle(.secondary)
             }
         } else {
-            MarkdownLite(text: message.text)
+            let view = MarkdownLite(text: message.text)
+            VStack(alignment: .leading, spacing: 6) {
+                view
+                // Пока ответ ещё пишется, копировать рано.
+                if !(chat.isGenerating && message.id == chat.messages.last?.id) {
+                    CopyButton(text: view.plainText)
+                }
+            }
         }
     }
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if Hardware.supportsChat, !chat.isGenerating {
+            if LLM.available, !chat.isGenerating {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(ChatViewModel.templates, id: \.title) { template in
@@ -334,12 +345,12 @@ struct MeetingView: View {
                 }
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField(Hardware.supportsChat ? "Спросите о встрече" : "Чат доступен на Mac с 16+ ГБ памяти",
+                TextField(LLM.available ? "Спросите о встрече" : "Чат недоступен — выберите модель в настройках",
                           text: $chat.input, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .lineLimit(1...6)
-                    .disabled(!Hardware.supportsChat)
+                    .disabled(!LLM.available)
                     .onSubmit { chat.send() }
                 if chat.isGenerating {
                     Button {
@@ -358,13 +369,13 @@ struct MeetingView: View {
                             .foregroundStyle(chat.input.isEmpty ? Color.secondary.opacity(0.5) : Color.primary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(chat.input.isEmpty || !Hardware.supportsChat)
+                    .disabled(chat.input.isEmpty || !LLM.available)
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
-            Text("\(LLMSpec.current.title) · локально, данные не покидают Mac")
+            Text(LLM.privacyNote)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -560,34 +571,68 @@ struct MarkdownLite: View {
 
     private var bodyFont: Font { serif ? Design.voice : .system(size: 13.5) }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let title):
-                    Text(title)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 8)
-                case .bullet(let item):
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("•").foregroundStyle(.tertiary)
-                        Text(inline(item)).font(bodyFont).lineSpacing(3)
-                    }
-                case .quote(let quote):
-                    Text(inline(quote))
-                        .font(bodyFont)
-                        .fontWeight(.medium)
-                        .padding(.leading, 12)
-                        .overlay(alignment: .leading) {
-                            Rectangle().fill(Design.primary.opacity(0.5)).frame(width: 2)
-                        }
-                case .paragraph(let paragraph):
-                    Text(inline(paragraph)).font(bodyFont).lineSpacing(3)
-                }
+    /// Весь текст — одним куском: так его можно выделить мышью целиком,
+    /// а не по одному абзацу.
+    private var rendered: AttributedString {
+        var out = AttributedString()
+        for (index, block) in blocks.enumerated() {
+            var piece: AttributedString
+            switch block {
+            case .heading(let title):
+                piece = AttributedString(title)
+                piece.font = .system(size: 12)
+                piece.foregroundColor = .secondary
+                if index > 0 { out += AttributedString("\n") }
+            case .bullet(let item):
+                var mark = AttributedString("•  ")
+                mark.foregroundColor = .secondary
+                piece = mark + inline(item)
+            case .quote(let quote):
+                var mark = AttributedString("▎")
+                mark.foregroundColor = Design.primary
+                piece = mark + inline(quote)
+            case .paragraph(let paragraph):
+                piece = inline(paragraph)
             }
+            if index > 0 { out += AttributedString("\n") }
+            out += piece
         }
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        return out
+    }
+
+    /// Текст без разметки — для кнопки «Скопировать».
+    var plainText: String { String(rendered.characters) }
+
+    var body: some View {
+        Text(rendered)
+            .font(bodyFont)
+            .lineSpacing(5)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Кнопка «Скопировать» под ответом или итогами.
+struct CopyButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                copied = false
+            }
+        } label: {
+            Label(copied ? "Скопировано" : "Скопировать", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .pointingCursor()
+        .help("Скопировать текст целиком")
     }
 }
