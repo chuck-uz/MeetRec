@@ -17,6 +17,9 @@ struct SettingsView: View {
                 }
                 toggleRow("Расшифровывать после записи", detail: Transcriber.modelTitle + (state.modelStatus.map { " · \($0)" } ?? ""),
                           isOn: $state.autoTranscribe)
+                toggleRow("Живые субтитры во время записи",
+                          detail: "текст встречи и перевод по ходу разговора; расшифровка после записи от этого не зависит",
+                          isOn: $state.liveCaptions)
                 row("Язык распознавания", detail: "он же — язык, на который переводятся субтитры") {
                     Picker("", selection: $state.transcribeLanguage) {
                         ForEach(AppState.languageOptions, id: \.code) { option in
