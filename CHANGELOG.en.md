@@ -7,6 +7,13 @@ Russian version: [CHANGELOG.md](CHANGELOG.md).
 
 ## [Unreleased]
 
+## [1.23.1] — 2026-11-20
+
+### Added
+- **Live captions toggle in Settings.** Settings → "Запись" → "Живые субтитры во время
+  записи". Captions are off by default; the transcript made after the recording does not
+  depend on the toggle.
+
 ## [1.23] — 2026-11-12
 
 ### Added
